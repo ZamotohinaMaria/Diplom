@@ -1,0 +1,10 @@
+**/__pycache__/
+*.py[cod]
+/runs/multi_split_eval/
+*.pt
+*.pth
+*.safetensors
+*.npy
+*.npz
+/my-GINE-model upgrade 1/runs
+/my-GINE-model/runs
