@@ -7,6 +7,10 @@ import shlex
 import importlib.util
 from datetime import datetime
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "experiments"))
+from log_run import tracked_run  # noqa: E402
+import re  # noqa: E402
+
 def ensure_dir_writable(path, name):
     if path is None or str(path).strip() == "":
         raise ValueError(f"{name} is empty")
@@ -215,9 +219,14 @@ if __name__ == '__main__':
         print(" ".join(command_list), file=f)
 
     print(" ".join(command_list))
-    if args.submit == 'no':
-        subprocess.run(command_list, env=env, cwd=project_dir, check=False)
-    # #
-    elif args.submit == 'yes':
+    if args.submit == 'yes':
         print("submit=yes is remapped to local run in this Windows-default build.")
-        subprocess.run(command_list, env=env, cwd=project_dir, check=False)
+
+    m = re.search(r"--malbehav_train\s+(\S+)", args.app)
+    data_file = os.path.normpath(os.path.join(project_dir, m.group(1))) if m else ""
+    with tracked_run("Diffusion-LM run_train.py", params=vars(args), seed=args.seed,
+                     log_path=Model_FILE, dataset_path=data_file,
+                     notes="метрики и чекпоинты в log_path (progress.csv, best_model.pt)") as run:
+        proc = subprocess.run(command_list, env=env, cwd=project_dir, check=False)
+        if proc.returncode != 0:
+            run.finish("failed", notes=f"returncode={proc.returncode}")

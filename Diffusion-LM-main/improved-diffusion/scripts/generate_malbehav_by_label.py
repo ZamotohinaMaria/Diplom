@@ -88,8 +88,7 @@ def ensure_dir_writable(path, name):
         raise PermissionError(f"{name} is not writable: {path}. Error: {e}")
 
 
-def main():
-    args = parse_args()
+def run_generation(args):
     ensure_file_exists(args.model_path, "model_path")
     ensure_file_exists(args.text_sample_script, "text_sample_script")
     ensure_dir_writable(args.out_dir, "out_dir")
@@ -188,6 +187,17 @@ def main():
             f"label={label} accepted={len(rows)} total_seen={total_seen} "
             f"acceptance_rate={acceptance_rate:.2f}%"
         )
+
+
+def main():
+    args = parse_args()
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "experiments"))
+    from log_run import tracked_run
+    # data_version здесь = sha256 чекпоинта модели, из которой генерируем
+    with tracked_run("Diffusion-LM generate_malbehav_by_label.py", params=vars(args),
+                     log_path=args.out_dir, dataset_path=args.model_path,
+                     notes="генерация; результаты в log_path"):
+        run_generation(args)
 
 
 if __name__ == "__main__":

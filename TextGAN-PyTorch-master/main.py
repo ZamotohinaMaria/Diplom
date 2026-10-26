@@ -9,6 +9,11 @@
 from __future__ import print_function
 
 import argparse
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "experiments"))
+from log_run import tracked_run  # noqa: E402
 
 import config as cfg
 from utils.text_process import load_test_dict, text_process
@@ -130,7 +135,12 @@ if __name__ == '__main__':
 
     from instructor.real_data.relgan_instructor import RelGANInstructor
     inst = RelGANInstructor(opt)
-    if not cfg.if_test:
-        inst._run()
-    else:
-        inst._test()
+    script = 'TextGAN main.py (RelGAN)' + (' test' if cfg.if_test else ' train')
+    params = {k: v for k, v in vars(opt).items() if isinstance(v, (int, float, str, bool))}
+    data_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dataset', opt.dataset + '.txt')
+    with tracked_run(script, params=params, log_path=str(opt.log_file), dataset_path=data_file,
+                     notes='метрики см. лог (save/...)'):
+        if not cfg.if_test:
+            inst._run()
+        else:
+            inst._test()

@@ -13,6 +13,10 @@ import torch
 from sklearn.metrics import confusion_matrix
 from torch_geometric.loader import DataLoader
 
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "experiments"))
+from log_run import tracked_run  # noqa: E402
+
 from data_io import guess_label_column
 from dataset_adapters import load_and_prepare_with_adapter
 from graph_data import (
@@ -244,8 +248,7 @@ def write_run_report(path: str, seed: int, train_size: int, eval_size: int, metr
         f.write("\n".join(lines) + "\n")
 
 
-def main():
-    args = parse_args()
+def run_all(args) -> dict:
     set_seed(args.base_seed)
 
     if not os.path.exists(args.csv):
@@ -437,6 +440,21 @@ def main():
     print(f"Summary CSV: {summary_csv}")
     print(f"Aggregate TXT: {agg_txt}")
     print(f"All artifacts saved in: {exp_dir}")
+    return {
+        "metrics": {c: round(float(summary_df[c].astype(float).mean()), 4) for c in metric_cols},
+        "aggregate_txt": agg_txt,
+        "exp_dir": exp_dir,
+    }
+
+
+def main():
+    args = parse_args()
+    params = {k: v for k, v in vars(args).items() if k != "csv"}
+    with tracked_run("my-GINE-model/run_splits.py", params=params, seed=args.base_seed,
+                     dataset_path=args.csv) as run:
+        summary = run_all(args)
+        run.set(metrics=summary["metrics"], log_path=summary["aggregate_txt"],
+                notes=f"exp_dir={summary['exp_dir']}; eval как test, порог фиксирован, validation нет")
 
 
 if __name__ == "__main__":

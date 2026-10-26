@@ -14,6 +14,9 @@ import numpy as np
 import torch
 from torch_geometric.loader import DataLoader
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "experiments"))
+from log_run import tracked_run  # noqa: E402
+
 from cli import parse_args
 from dataset_adapters import load_and_prepare_with_adapter
 from graph_data import make_graph_dataset, print_dataset_stats, split_dataset
@@ -170,7 +173,7 @@ def build_auto_train_log_path(args, output_dir: str) -> str:
     return os.path.join(output_dir, "models", file_name)
 
 
-def run_training(args) -> None:
+def run_training(args) -> dict:
     set_seed(args.seed)
 
     auto_model_name = args.save_path is None
@@ -354,6 +357,17 @@ def run_training(args) -> None:
         f.write("\n".join(report_lines) + "\n")
 
     print(f"Saved run summary to: {results_path}")
+    return {"best_epoch": best_epoch, "test": test_metrics, "model_path": save_path}
+
+
+def run_training_logged(args, train_log_path: str) -> None:
+    """Обучение + строка в EXPERIMENTS.csv: running в начале, ok/failed в конце."""
+    params = {k: v for k, v in vars(args).items() if k != "csv"}
+    with tracked_run("my-GINE-model/train_gine.py", params=params, seed=args.seed,
+                     log_path=train_log_path, dataset_path=args.csv) as run:
+        out = run_training(args)
+        run.set(metrics={"test": out["test"], "best_epoch": out["best_epoch"]},
+                notes=f"model={out['model_path']}")
 
 
 def main():
@@ -371,7 +385,7 @@ def main():
         )
 
     if log_file is None:
-        run_training(args)
+        run_training_logged(args, train_log_path)
         return
 
     with log_file:
@@ -379,7 +393,7 @@ def main():
         stderr_tee = TeeStream(sys.stderr, log_file)
         with contextlib.redirect_stdout(stdout_tee), contextlib.redirect_stderr(stderr_tee):
             print(f"Training log file: {train_log_path}")
-            run_training(args)
+            run_training_logged(args, train_log_path)
 
 
 if __name__ == "__main__":

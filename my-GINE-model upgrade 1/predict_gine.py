@@ -21,6 +21,10 @@ from sklearn.metrics import (
 )
 from torch_geometric.loader import DataLoader
 
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "experiments"))
+from log_run import tracked_run  # noqa: E402
+
 from data_io import guess_label_column, guess_sequence_column
 from graph_data import build_graph_from_sequence, normalize_label, sequence_to_ids, split_api_sequence
 from model import GINEMalwareClassifier
@@ -377,8 +381,7 @@ def build_metrics_report(
     return lines
 
 
-def main():
-    args = parse_args()
+def run_predict(args) -> None:
 
     if bool(args.input_seq) == bool(args.input_csv):
         raise ValueError("Set exactly one input source: --input-seq OR --input-csv")
@@ -566,6 +569,14 @@ def main():
     print("\n".join(report_lines))
     print("")
     print(f"Saved prediction metrics to: {pred_path}")
+
+
+def main():
+    args = parse_args()
+    params = {k: v for k, v in vars(args).items() if k not in ("input_seq", "input_csv")}
+    with tracked_run("predict_gine.py", params=params, notes=f"model={args.model_path}",
+                     log_path=args.predictions_path or "", dataset_path=args.input_csv or ""):
+        run_predict(args)
 
 
 if __name__ == "__main__":
