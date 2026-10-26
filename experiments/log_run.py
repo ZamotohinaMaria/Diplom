@@ -19,7 +19,8 @@ import time
 from datetime import datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXPERIMENTS_CSV = os.path.join(ROOT, "EXPERIMENTS.csv")
+# переменная окружения EXPERIMENTS_CSV нужна только для тестовых прогонов, чтобы не засорять настоящий журнал
+EXPERIMENTS_CSV = os.environ.get("EXPERIMENTS_CSV") or os.path.join(ROOT, "EXPERIMENTS.csv")
 DATASET_CSV = os.path.join(ROOT, "MalbehavD-V1-main", "MalBehavD-V1-dataset.csv")
 COLUMNS = ["date", "script", "params", "seed", "data_version", "metrics", "log_path", "status", "notes"]
 

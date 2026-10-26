@@ -1,0 +1,25 @@
+Датасет: C:\Users\Marishka\Desktop\code\Diplom\MalbehavD-V1-main\MalBehavD-V1-dataset.csv
+
+[Сводная таблица]
+                                    metric  all  benign  malware
+                               Всего строк 2570    1285     1285
+            Уникальных последовательностей 1601    1123      479
+               из них только в этом классе <NA>    1122      478
+            из них общих для обоих классов    1    <NA>     <NA>
+Строк в группах дублей (группа >= 2 строк) 1157     242      915
+         Лишних копий (строк - уникальных)  969     162      806
+     Последовательностей с разными метками    1    <NA>     <NA>
+            Строк с конфликтующими метками   12       5        7
+        Строк с повторяющимся sha256 файла   53      17       36
+
+[5 крупнейших групп одинаковых последовательностей]
+ rank     seq_hash  size  benign  malware  seq_len  example_row
+    1 328c78f3a7fa   164       0      164       20         1300
+    2 b9369b7f1762    84       0       84       18         1285
+    3 39a357ea3214    52       0       52       24         1299
+    4 d6ee27bb546d    38       0       38       48         1318
+    5 2d4ef872373b    37       0       37       19         1367
+
+Сохранено: C:\Users\Marishka\Desktop\code\Diplom\derived\hashes.csv
+           C:\Users\Marishka\Desktop\code\Diplom\derived\audit_duplicates_table.csv
+           C:\Users\Marishka\Desktop\code\Diplom\derived\audit_top5_groups.csv
