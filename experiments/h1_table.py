@@ -4,6 +4,8 @@ H1: при протоколе A (случайное разбиение) метр
 Скрипт только считает числа; вывод о том, подтверждается ли H1, делается вручную.
 
 Читает derived/results_tfidf.csv и derived/results_gine.csv (то, что есть).
+Если есть derived/results_tfidf_ngram1.csv (блок ngram1 из baseline_tfidf.py), в конец отчёта
+добавляется проверка «TF-IDF 1–3-граммы против только 1-грамм»; в таблицы H1 эта модель не входит.
 
 Результаты:
   derived/h1_table.md    отчёт: таблицы среднее ± std, разница A − B и пояснения к столбцам
@@ -30,8 +32,42 @@ def parse_args():
     p = argparse.ArgumentParser(description="Сводная таблица H1")
     p.add_argument("--results", nargs="+", default=[os.path.join(ROOT, "derived", "results_tfidf.csv"),
                                                     os.path.join(ROOT, "derived", "results_gine.csv")])
+    p.add_argument("--ngram1-results", default=os.path.join(ROOT, "derived", "results_tfidf_ngram1.csv"))
     p.add_argument("--out-dir", default=os.path.join(ROOT, "derived"))
     return p.parse_args()
+
+
+def all_vs_dedup_table(res: pd.DataFrame) -> pd.DataFrame:
+    """Средние по seed: метрика на всех строках test, на дедуплицированном test и их разница."""
+    g = res.groupby(["model", "protocol"])
+    out = pd.DataFrame(index=g.size().index)
+    for m in ("mcc", "pr_auc"):
+        out[m] = g[m].mean()
+        out[f"dedup_{m}"] = g[f"dedup_{m}"].mean()
+        out[f"diff_{m}"] = out[f"dedup_{m}"] - out[m]
+    return out.reset_index()
+
+
+def ngram1_table(full: pd.DataFrame, uni: pd.DataFrame) -> pd.DataFrame:
+    """TF-IDF 1–3 против 1-грамм: средние по seed для каждого протокола и разница (1-граммы минус 1–3)."""
+    rows = []
+    for protocol in sorted(set(full.protocol) & set(uni.protocol)):
+        f, u = full[full.protocol == protocol], uni[uni.protocol == protocol]
+        row = {"protocol": protocol, "n_seeds": f"{len(f)} / {len(u)}"}
+        for m in ("mcc", "dedup_mcc", "pr_auc", "dedup_pr_auc"):
+            row[f"{m}_1to3"], row[f"{m}_1"] = f[m].mean(), u[m].mean()
+            row[f"diff_{m}"] = u[m].mean() - f[m].mean()
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def fmt(df: pd.DataFrame) -> pd.DataFrame:
+    """Округление для отчёта: разницы со знаком, остальные числа — 4 знака."""
+    df = df.copy()
+    for c in df.columns:
+        if pd.api.types.is_float_dtype(df[c]):
+            df[c] = df[c].map((lambda v: f"{v:+.4f}") if c.startswith("diff_") else (lambda v: f"{v:.4f}"))
+    return df
 
 
 def mean_std_table(res: pd.DataFrame, metrics: list) -> pd.DataFrame:
@@ -89,6 +125,27 @@ def main():
         shown_diff["diff_to_max_std"] = shown_diff["diff_to_max_std"].map(lambda v: f"{v:.2f}")
         shown_diff["welch_p"] = shown_diff["welch_p"].map(lambda v: f"{v:.3f}")
 
+        # дополнительная проверка: TF-IDF только на 1-граммах (если блок ngram1 уже запускали)
+        ngram1_block = []
+        full_tfidf = res[res.model == "tfidf_logreg"]
+        if os.path.exists(args.ngram1_results) and not full_tfidf.empty:
+            uni = pd.read_csv(args.ngram1_results)
+            ngram1_block = [
+                "",
+                "## Проверка: TF-IDF только на 1-граммах",
+                "",
+                f"Источник: `{os.path.relpath(args.ngram1_results, ROOT)}` (блок ngram1 из baseline_tfidf.py). "
+                "Модель та же (TF-IDF + LogReg, C и порог по val), но признаки — только отдельные API, "
+                "без порядка вызовов. Средние по seed.",
+                "",
+                "- `*_1to3` — основная модель (n-граммы 1–3), `*_1` — только 1-граммы",
+                "- `diff_*` — 1-граммы минус 1–3; около нуля — порядок вызовов почти ничего не добавляет, "
+                "сигнал в самом наборе API",
+                "- `n_seeds` — число seed в основной модели / в проверке",
+                "",
+                fmt(ngram1_table(full_tfidf, uni)).to_markdown(index=False, disable_numparse=True),
+            ]
+
         report = "\n".join([
             "# Проверка H1",
             "",
@@ -115,6 +172,13 @@ def main():
             "",
             table[["model", "protocol"] + [f"dedup_{m}" for m in METRICS]].to_markdown(index=False),
             "",
+            "## Все строки test против дедуплицированного",
+            "",
+            "Средние по seed. `diff_*` — dedup минус все строки: насколько метрика падает, когда каждая "
+            "последовательность учтена один раз (повторы перестают давать вес лёгким примерам).",
+            "",
+            fmt(all_vs_dedup_table(res)).to_markdown(index=False, disable_numparse=True),
+            "",
             "## Разница A − B",
             "",
             "- `diff_A_minus_B` — среднее A минус среднее B (для `fpr_at_tpr95` меньше = лучше)",
@@ -126,6 +190,7 @@ def main():
             "при 5 значениях на группу тест слабый, это ориентир, а не доказательство",
             "",
             shown_diff.to_markdown(index=False),
+            *ngram1_block,
             "",
             "Числа без округления: `h1_table.csv`, `h1_diff.csv` в той же папке.",
         ])
@@ -136,6 +201,9 @@ def main():
               f"({len(res)} строк, моделей: {res['model'].nunique()})")
         if warnings:
             print("ВНИМАНИЕ: не у всех моделей 5 seed:\n" + "\n".join(warnings))
+        print("Проверка на 1-граммах: " + ("добавлена в отчёт" if ngram1_block else
+                                           "нет файла результатов (python experiments/baseline_tfidf.py "
+                                           "--blocks ngram1)"))
         print(f"Отчёт: {os.path.relpath(md_path, ROOT)}")
         print(f"Числа без округления: {os.path.relpath(os.path.join(args.out_dir, 'h1_table.csv'), ROOT)}, "
               f"{os.path.relpath(os.path.join(args.out_dir, 'h1_diff.csv'), ROOT)}")

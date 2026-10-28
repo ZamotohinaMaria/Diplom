@@ -8,13 +8,23 @@
 
 Каждое разбиение — отдельная строка в EXPERIMENTS.csv.
 
-Результаты:
-  derived/results_tfidf.csv                      строка на (protocol, seed)
-  derived/predictions/tfidf_{A,B}_seed{N}.csv    вероятности на val и test
-  experiments/logs/baseline_tfidf.txt            текстовый отчёт
+Скрипт состоит из двух блоков (--blocks):
+  main    основная модель: n-граммы 1–3 (--ngram-max)
+  ngram1  проверка: только 1-граммы, то есть «какие API встречались» без порядка вызовов.
+          Если MCC почти не падает, сигнал в наборе вызовов, а порядок мало что добавляет.
+
+Результаты блока main:
+  derived/results_tfidf.csv                             строка на (protocol, seed)
+  derived/predictions/tfidf_{A,B}_seed{N}.csv           вероятности на val и test
+  experiments/logs/baseline_tfidf.txt                   текстовый отчёт
+Результаты блока ngram1:
+  derived/results_tfidf_ngram1.csv
+  derived/predictions/tfidf_ngram1_{A,B}_seed{N}.csv
+  experiments/logs/baseline_tfidf_ngram1.txt
 
 Запуск из корня репозитория:
-  python experiments/baseline_tfidf.py
+  python experiments/baseline_tfidf.py                                 # оба блока
+  python experiments/baseline_tfidf.py --blocks ngram1                 # только проверка на 1-граммах
   python experiments/baseline_tfidf.py --protocols B --seeds 42 43     # часть разбиений
 """
 import argparse
@@ -38,11 +48,21 @@ def parse_args():
     p = argparse.ArgumentParser(description="TF-IDF (1–3-граммы API) + LogReg на разбиениях A/B")
     p.add_argument("--protocols", nargs="+", default=["A", "B"], choices=["A", "B"])
     p.add_argument("--seeds", nargs="+", type=int, default=[42, 43, 44, 45, 46])
-    p.add_argument("--ngram-max", type=int, default=3)
-    p.add_argument("--out", default=os.path.join(ROOT, "derived", "results_tfidf.csv"))
+    p.add_argument("--blocks", nargs="+", default=["main", "ngram1"], choices=["main", "ngram1"])
+    p.add_argument("--ngram-max", type=int, default=3, help="верхняя граница n-грамм для блока main")
     p.add_argument("--pred-dir", default=os.path.join(ROOT, "derived", "predictions"))
-    p.add_argument("--log", default=os.path.join(ROOT, "experiments", "logs", "baseline_tfidf.txt"))
     return p.parse_args()
+
+
+# блок -> (модель, верхняя граница n-грамм, файл результатов, префикс предсказаний, отчёт)
+def block_config(block: str, args) -> dict:
+    if block == "main":
+        return {"model": "tfidf_logreg", "ngram_max": args.ngram_max,
+                "out": os.path.join(ROOT, "derived", "results_tfidf.csv"), "pred_prefix": "tfidf",
+                "log": os.path.join(ROOT, "experiments", "logs", "baseline_tfidf.txt")}
+    return {"model": "tfidf_logreg_ngram1", "ngram_max": 1,
+            "out": os.path.join(ROOT, "derived", "results_tfidf_ngram1.csv"), "pred_prefix": "tfidf_ngram1",
+            "log": os.path.join(ROOT, "experiments", "logs", "baseline_tfidf_ngram1.txt")}
 
 
 def make_vectorizer(ngram_max: int) -> TfidfVectorizer:
@@ -68,10 +88,10 @@ def fit_one(train, val, ngram_max: int, seed: int):
     return vec, best
 
 
-def run_one(data, protocol: str, seed: int, args) -> dict:
+def run_one(data, protocol: str, seed: int, cfg: dict, args) -> dict:
     path = split_path(protocol, seed)
     train, val, test = load_split(data, path)
-    vec, best = fit_one(train, val, args.ngram_max, seed)
+    vec, best = fit_one(train, val, cfg["ngram_max"], seed)
 
     # пороги фиксируются по val
     y_va = val["label"].to_numpy()
@@ -80,41 +100,41 @@ def run_one(data, protocol: str, seed: int, args) -> dict:
 
     # test — один раз, когда всё выбрано
     p_te = best["clf"].predict_proba(vec.transform(" ".join(s) for s in test["seq"]))[:, 1]
-    row = {"model": "tfidf_logreg", "protocol": protocol, "seed": seed, "C": best["C"],
+    row = {"model": cfg["model"], "protocol": protocol, "seed": seed, "C": best["C"],
            "n_features": len(vec.vocabulary_), "thr_mcc": thr, "thr_tpr95": thr_tpr,
            "val_mcc": best["val_mcc"]}
     row.update(evaluate_test(test, p_te, thr, thr_tpr))
     row.update(oov_stats(train["seq"], test["seq"]))
 
-    save_predictions(os.path.join(args.pred_dir, f"tfidf_{protocol}_seed{seed}.csv"),
+    save_predictions(os.path.join(args.pred_dir, f"{cfg['pred_prefix']}_{protocol}_seed{seed}.csv"),
                      {"val": (val, best["p_va"]), "test": (test, p_te)})
     return row
 
 
-def main():
-    args = parse_args()
-    os.makedirs(os.path.dirname(args.log), exist_ok=True)
-    data = load_data()
+def run_block(data, block: str, args) -> None:
+    cfg = block_config(block, args)
+    os.makedirs(os.path.dirname(cfg["log"]), exist_ok=True)
+    print(f"\n##### блок {block}: n-граммы 1–{cfg['ngram_max']} #####")
     rows = []
     for protocol in args.protocols:
         for seed in args.seeds:
-            params = {"ngram_range": [1, args.ngram_max], "C_grid": C_GRID, "select": "val MCC",
-                      "threshold": "val MCC", "sublinear_tf": True}
-            with tracked_run("baseline_tfidf.py", params=params, seed=seed, log_path=args.log,
+            params = {"block": block, "ngram_range": [1, cfg["ngram_max"]], "C_grid": C_GRID,
+                      "select": "val MCC", "threshold": "val MCC", "sublinear_tf": True}
+            with tracked_run("baseline_tfidf.py", params=params, seed=seed, log_path=cfg["log"],
                              split_file=split_path(protocol, seed), dataset_path=DATASET_CSV,
-                             notes=f"protocol={protocol}") as run:
-                row = run_one(data, protocol, seed, args)
+                             notes=f"protocol={protocol}; block={block}") as run:
+                row = run_one(data, protocol, seed, cfg, args)
                 rows.append(row)
                 run.set(metrics=rounded({k: row[k] for k in ("C", "val_mcc", "mcc", "f1", "pr_auc", "roc_auc",
                                                              "fpr_at_tpr95", "dedup_mcc", "dedup_pr_auc")}))
             print(f"{protocol} seed={seed}: C={row['C']} test MCC={row['mcc']:.4f} PR-AUC={row['pr_auc']:.4f} "
                   f"FPR@TPR95={row['fpr_at_tpr95']:.4f} | dedup MCC={row['dedup_mcc']:.4f}")
 
-    res = merge_results(args.out, rows)
+    res = merge_results(cfg["out"], rows)
     cols = ["protocol", "seed", "C", "mcc", "f1", "pr_auc", "roc_auc", "fpr_at_tpr95", "tpr_at_tpr95",
             "dedup_mcc", "dedup_pr_auc", "n_test", "n_test_dedup", "oov_seq_share"]
     report = "\n".join([
-        "TF-IDF (n-граммы API 1–%d) + LogReg. C и пороги выбраны на val; метрики — на test." % args.ngram_max,
+        "TF-IDF (n-граммы API 1–%d) + LogReg. C и пороги выбраны на val; метрики — на test." % cfg["ngram_max"],
         "",
         "Пояснение к столбцам:",
         "  C              — сила регуляризации LogReg, выбранная по MCC на val",
@@ -128,11 +148,19 @@ def main():
         "",
         res[cols].to_string(index=False, float_format=lambda v: f"{v:.4f}"),
         "",
-        f"Сохранено: {args.out}",
+        f"Сохранено: {cfg['out']}",
     ])
     print("\n" + report)
-    with open(args.log, "w", encoding="utf-8") as f:
+    with open(cfg["log"], "w", encoding="utf-8") as f:
         f.write(report + "\n")
+
+
+def main():
+    args = parse_args()
+    data = load_data()
+    for block in ("main", "ngram1"):   # порядок фиксирован: сначала основная модель, проверка — в конце
+        if block in args.blocks:
+            run_block(data, block, args)
 
 
 if __name__ == "__main__":
