@@ -1,7 +1,7 @@
 import json
 import re
 from collections import Counter
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -121,19 +121,15 @@ def build_graph_from_sequence(
     return Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
 
 
-def make_graph_dataset(
+def parse_sequences(
     df: pd.DataFrame,
     label_col: str,
     seq_col: str,
     delimiter_regex: str,
-    min_token_freq: int,
-    max_seq_len: int,
-    undirected: bool,
-    add_skip_edges: bool,
-) -> Tuple[List[Data], Dict[str, int]]:
+) -> Tuple[List[List[str]], List[int]]:
+    """Токены и метки строк df; строки без токенов или с нераспознанной меткой пропускаются."""
     parsed_sequences = []
     labels = []
-
     for _, row in df.iterrows():
         try:
             label = normalize_label(row[label_col])
@@ -144,33 +140,64 @@ def make_graph_dataset(
             labels.append(label)
         except Exception:
             continue
+    return parsed_sequences, labels
 
+
+def sequences_to_graphs(
+    sequences: List[List[str]],
+    labels: List[int],
+    vocab: Dict[str, int],
+    max_seq_len: int,
+    undirected: bool,
+    add_skip_edges: bool,
+) -> List[Data]:
+    """Графы по готовому словарю: API, которых нет в словаре, получают id <UNK> = 0."""
+    graphs = []
+    for seq, label in zip(sequences, labels):
+        api_ids = sequence_to_ids(seq, vocab, max_seq_len=max_seq_len)
+        graphs.append(
+            build_graph_from_sequence(
+                api_ids=api_ids,
+                label=label,
+                vocab_size=len(vocab),
+                undirected=undirected,
+                add_skip_edges=add_skip_edges,
+            )
+        )
+    return graphs
+
+
+def make_graph_dataset(
+    df: pd.DataFrame,
+    label_col: str,
+    seq_col: str,
+    delimiter_regex: str,
+    min_token_freq: int,
+    max_seq_len: int,
+    undirected: bool,
+    add_skip_edges: bool,
+    vocab: Optional[Dict[str, int]] = None,
+) -> Tuple[List[Data], Dict[str, int]]:
+    """Графы для df.
+
+    vocab=None  -> словарь строится по самому df. Так вызывать только для train-части.
+    vocab=dict  -> используется готовый словарь (построенный по train) — для val / test / eval.
+    """
+    parsed_sequences, labels = parse_sequences(df, label_col, seq_col, delimiter_regex)
     if len(parsed_sequences) == 0:
         raise ValueError("No valid sequences after parsing")
 
-    vocab = build_vocab(parsed_sequences, min_token_freq=min_token_freq)
-    vocab_size = len(vocab)
+    if vocab is None:
+        vocab = build_vocab(parsed_sequences, min_token_freq=min_token_freq)
 
-    graphs = []
-    for seq, label in zip(parsed_sequences, labels):
-        api_ids = sequence_to_ids(seq, vocab, max_seq_len=max_seq_len)
-        data = build_graph_from_sequence(
-            api_ids=api_ids,
-            label=label,
-            vocab_size=vocab_size,
-            undirected=undirected,
-            add_skip_edges=add_skip_edges,
-        )
-        graphs.append(data)
-
+    graphs = sequences_to_graphs(parsed_sequences, labels, vocab, max_seq_len, undirected, add_skip_edges)
     return graphs, vocab
 
 
-def split_dataset(graphs: List[Data], test_size: float, val_size: float, seed: int):
-    labels = [int(g.y.item()) for g in graphs]
-
+def split_indices(labels: List[int], test_size: float, val_size: float, seed: int):
+    """Стратифицированное разбиение номеров на train / val / test (логика прежнего split_dataset)."""
     train_val_idx, test_idx = train_test_split(
-        np.arange(len(graphs)),
+        np.arange(len(labels)),
         test_size=test_size,
         random_state=seed,
         stratify=labels,
@@ -183,6 +210,12 @@ def split_dataset(graphs: List[Data], test_size: float, val_size: float, seed: i
         random_state=seed,
         stratify=train_val_labels,
     )
+    return train_idx, val_idx, test_idx
+
+
+def split_dataset(graphs: List[Data], test_size: float, val_size: float, seed: int):
+    labels = [int(g.y.item()) for g in graphs]
+    train_idx, val_idx, test_idx = split_indices(labels, test_size, val_size, seed)
 
     train_graphs = [graphs[i] for i in train_idx]
     val_graphs = [graphs[i] for i in val_idx]

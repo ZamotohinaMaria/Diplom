@@ -20,7 +20,13 @@ from log_run import tracked_run  # noqa: E402
 
 from cli import parse_args
 from dataset_adapters import load_and_prepare_with_adapter
-from graph_data import make_graph_dataset, print_dataset_stats, split_dataset
+from graph_data import (
+    build_vocab,
+    parse_sequences,
+    print_dataset_stats,
+    sequences_to_graphs,
+    split_indices,
+)
 from model import GINEMalwareClassifier
 from trainer import (
     evaluate,
@@ -271,37 +277,47 @@ def run_training(args) -> dict:
     print(f"Rows after preparation: {len(df)}")
 
     print("Building graph dataset...")
-    graphs, vocab = make_graph_dataset(
-        df=df,
-        label_col=label_col,
-        seq_col=seq_col,
-        delimiter_regex=args.delimiter_regex,
-        min_token_freq=args.min_token_freq,
-        max_seq_len=args.max_seq_len,
-        undirected=args.undirected,
-        add_skip_edges=args.add_skip_edges,
-    )
+    sequences, labels = parse_sequences(df, label_col, seq_col, args.delimiter_regex)
+    if len(sequences) == 0:
+        raise ValueError("No valid sequences after parsing")
 
-    with open(vocab_path, "w", encoding="utf-8") as f:
-        json.dump(vocab, f, ensure_ascii=False, indent=2)
-
-    print(f"Vocabulary size: {len(vocab)}")
-    print(f"Output dir: {args.output_dir}")
-    print(f"Saved vocab to: {vocab_path}")
-
+    # Разбиение делается ДО построения словаря: словарь API строится только по train-части.
+    # Номера частей те же, что давал прежний split_dataset (та же функция train_test_split и seed).
     if args.no_internal_split:
-        train_graphs = graphs
-        val_graphs = []
-        test_graphs = []
-        print("\nInternal split disabled (--no-internal-split).")
-        print_dataset_stats(train_graphs, "TRAIN_ALL")
+        train_idx, val_idx, test_idx = np.arange(len(sequences)), [], []
     else:
-        train_graphs, val_graphs, test_graphs = split_dataset(
-            graphs=graphs,
+        train_idx, val_idx, test_idx = split_indices(
+            labels=labels,
             test_size=args.test_size,
             val_size=args.val_size,
             seed=args.seed,
         )
+
+    vocab = build_vocab([sequences[i] for i in train_idx], min_token_freq=args.min_token_freq)
+
+    def graphs_for(idx):
+        return sequences_to_graphs(
+            [sequences[i] for i in idx],
+            [labels[i] for i in idx],
+            vocab,
+            max_seq_len=args.max_seq_len,
+            undirected=args.undirected,
+            add_skip_edges=args.add_skip_edges,
+        )
+
+    train_graphs, val_graphs, test_graphs = graphs_for(train_idx), graphs_for(val_idx), graphs_for(test_idx)
+
+    with open(vocab_path, "w", encoding="utf-8") as f:
+        json.dump(vocab, f, ensure_ascii=False, indent=2)
+
+    print(f"Vocabulary size (built on train only): {len(vocab)}")
+    print(f"Output dir: {args.output_dir}")
+    print(f"Saved vocab to: {vocab_path}")
+
+    if args.no_internal_split:
+        print("\nInternal split disabled (--no-internal-split).")
+        print_dataset_stats(train_graphs, "TRAIN_ALL")
+    else:
         print_dataset_stats(train_graphs, "TRAIN")
         print_dataset_stats(val_graphs, "VAL")
         print_dataset_stats(test_graphs, "TEST")

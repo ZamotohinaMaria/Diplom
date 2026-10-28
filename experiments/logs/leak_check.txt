@@ -1,0 +1,26 @@
+Схема run_splits.py: train-per-class=900, seeds=[42, 43, 44, 45, 46]
+
+Пояснение к столбцам:
+  seed                        — seed разбиения; последние две строки: mean и std (ddof=1) по seed
+  train_rows / eval_rows      — число строк в train и в eval
+  eval_with_copy              — сколько eval-строк имеют точную копию последовательности в train
+  share_all                   — eval_with_copy / eval_rows: доля eval-строк с копией в train
+                                (это и есть искомые 5 чисел задачи 2)
+  share_benign, share_malware — та же доля отдельно среди benign- и malware-строк eval
+  share_copy_same_label       — доля eval-строк, у которых копия в train есть и с той же меткой
+                                (модель может просто «вспомнить» ответ)
+  eval_unique_seqs            — число разных последовательностей в eval
+  eval_unique_seqs_with_copy  — сколько из них встречается и в train
+  Во всех share_* стоят проценты; mean/std посчитаны по пяти seed.
+  Копией считается точное совпадение seq_hash; близкие последовательности не учитываются.
+
+seed train_rows eval_rows eval_with_copy share_all share_benign share_malware share_copy_same_label eval_unique_seqs eval_unique_seqs_with_copy
+  42       1800       770            327     42.5%        16.1%         68.8%                 42.5%              548                        115
+  43       1800       770            302     39.2%        13.2%         65.2%                 39.2%              551                        100
+  44       1800       770            329     42.7%        18.2%         67.3%                 42.7%              550                        119
+  45       1800       770            318     41.3%        14.5%         68.1%                 41.3%              553                        109
+  46       1800       770            335     43.5%        16.1%         70.9%                 43.5%              528                        103
+mean                                         41.8%        15.6%         68.1%                 41.8%                                            
+ std                                          1.7%         1.9%          2.1%                  1.7%                                            
+
+Сохранено: C:\Users\Marishka\Desktop\code\Diplom\derived\leak_check_run_splits.csv
