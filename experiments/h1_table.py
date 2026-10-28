@@ -6,9 +6,9 @@ H1: при протоколе A (случайное разбиение) метр
 Читает derived/results_tfidf.csv и derived/results_gine.csv (то, что есть).
 
 Результаты:
-  derived/h1_table.csv / derived/h1_table.md   среднее ± std
-  derived/h1_diff.csv                          разница A − B по каждой модели и метрике
-  experiments/logs/h1_table.txt                текстовый отчёт
+  derived/h1_table.md    отчёт: таблицы среднее ± std, разница A − B и пояснения к столбцам
+  derived/h1_table.csv   среднее ± std (для дальнейшей обработки)
+  derived/h1_diff.csv    разница A − B по каждой модели и метрике (числа без округления)
 
 Запуск из корня репозитория:
   python experiments/h1_table.py
@@ -31,7 +31,6 @@ def parse_args():
     p.add_argument("--results", nargs="+", default=[os.path.join(ROOT, "derived", "results_tfidf.csv"),
                                                     os.path.join(ROOT, "derived", "results_gine.csv")])
     p.add_argument("--out-dir", default=os.path.join(ROOT, "derived"))
-    p.add_argument("--log", default=os.path.join(ROOT, "experiments", "logs", "h1_table.txt"))
     return p.parse_args()
 
 
@@ -67,15 +66,15 @@ def diff_table(res: pd.DataFrame, metrics: list) -> pd.DataFrame:
 def main():
     args = parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
-    os.makedirs(os.path.dirname(args.log), exist_ok=True)
+    md_path = os.path.join(args.out_dir, "h1_table.md")
     paths = [p for p in args.results if os.path.exists(p)]
     if not paths:
         raise FileNotFoundError("нет файлов результатов: сначала запусти baseline_tfidf.py и run_gine_splits.py")
 
     with tracked_run("h1_table.py", params={"results": [os.path.relpath(p, ROOT) for p in paths]},
-                     log_path=args.log, dataset_path=paths[0]) as run:
+                     log_path=md_path, dataset_path=paths[0]) as run:
         res = pd.concat([pd.read_csv(p) for p in paths], ignore_index=True)
-        warnings = [f"  {m} / {p}: seed {sorted(s.seed)} (ожидалось 5)"
+        warnings = [f"- {m} / {p}: seed {sorted(s.seed)} (ожидалось 5)"
                     for (m, p), s in res.groupby(["model", "protocol"]) if len(s) != 5]
 
         all_metrics = METRICS + [f"dedup_{m}" for m in METRICS]
@@ -83,10 +82,6 @@ def main():
         diff = diff_table(res, all_metrics)
         table.to_csv(os.path.join(args.out_dir, "h1_table.csv"), index=False, encoding="utf-8")
         diff.to_csv(os.path.join(args.out_dir, "h1_diff.csv"), index=False, encoding="utf-8")
-        with open(os.path.join(args.out_dir, "h1_table.md"), "w", encoding="utf-8") as f:
-            f.write("## Все строки test\n\n" + table[["model", "protocol", "n_seeds"] + METRICS]
-                    .to_markdown(index=False) + "\n\n## Дедуплицированный test\n\n"
-                    + table[["model", "protocol"] + [f"dedup_{m}" for m in METRICS]].to_markdown(index=False) + "\n")
 
         shown_diff = diff.copy()
         for c in ["mean_A", "mean_B", "diff_A_minus_B", "std_A", "std_B"]:
@@ -95,33 +90,55 @@ def main():
         shown_diff["welch_p"] = shown_diff["welch_p"].map(lambda v: f"{v:.3f}")
 
         report = "\n".join([
-            "H1: при протоколе A (случайное разбиение) метрики выше, чем при B (групповое).",
+            "# Проверка H1",
+            "",
+            "**H1:** при протоколе A (случайное разбиение) метрики выше, чем при B (групповое).",
+            "",
+            f"Источники: {', '.join(f'`{os.path.relpath(p, ROOT)}`' for p in paths)}. "
             "Среднее ± стандартное отклонение (ddof=1) по seed. Метрики посчитаны на test, порог выбран на val.",
-            *(["", "ВНИМАНИЕ: не у всех моделей 5 seed:", *warnings] if warnings else []),
+            *(["", "**ВНИМАНИЕ: не у всех моделей 5 seed:**", "", *warnings] if warnings else []),
             "",
-            "[Все строки test]",
-            table[["model", "protocol", "n_seeds"] + METRICS].to_string(index=False),
+            "## Метрики",
             "",
-            "[Дедуплицированный test: каждая последовательность учтена один раз]",
-            table[["model", "protocol"] + [f"dedup_{m}" for m in METRICS]].to_string(index=False),
+            "- `mcc`, `f1` — при пороге, выбранном по MCC на val",
+            "- `pr_auc`, `roc_auc` — от порога не зависят",
+            "- `fpr_at_tpr95` — доля benign, ложно отмеченных как malware, при пороге, который на val "
+            "ловит 95% malware (меньше = лучше)",
+            "- `dedup_*` — те же метрики на test, где каждая последовательность учтена один раз",
+            "- `n_seeds` — сколько разбиений (seed) усреднено",
             "",
-            "[Разница A − B]",
-            "Пояснение к столбцам:",
-            "  diff_A_minus_B  — среднее A минус среднее B (для fpr_at_tpr95 меньше = лучше)",
-            "  std_A / std_B   — разброс по seed в каждом протоколе",
-            "  diff_to_max_std — |разница| / наибольший из двух разбросов; меньше 1 — разница",
-            "                    укладывается в разброс по seed",
-            "  A_better        — метрика лучше при протоколе A",
-            "  welch_p         — p-value t-теста Уэлча (A и B — независимые выборки по 5 seed);",
-            "                    при 5 значениях на группу тест слабый, это ориентир, а не доказательство",
+            "## Все строки test",
             "",
-            shown_diff.to_string(index=False),
+            table[["model", "protocol", "n_seeds"] + METRICS].to_markdown(index=False),
             "",
-            f"Сохранено: {os.path.join(args.out_dir, 'h1_table.csv')}, h1_table.md, h1_diff.csv",
+            "## Дедуплицированный test",
+            "",
+            table[["model", "protocol"] + [f"dedup_{m}" for m in METRICS]].to_markdown(index=False),
+            "",
+            "## Разница A − B",
+            "",
+            "- `diff_A_minus_B` — среднее A минус среднее B (для `fpr_at_tpr95` меньше = лучше)",
+            "- `std_A` / `std_B` — разброс по seed в каждом протоколе",
+            "- `diff_to_max_std` — |разница| / наибольший из двух разбросов; меньше 1 — разница "
+            "укладывается в разброс по seed",
+            "- `A_better` — метрика лучше при протоколе A",
+            "- `welch_p` — p-value t-теста Уэлча (A и B — независимые выборки по 5 seed); "
+            "при 5 значениях на группу тест слабый, это ориентир, а не доказательство",
+            "",
+            shown_diff.to_markdown(index=False),
+            "",
+            "Числа без округления: `h1_table.csv`, `h1_diff.csv` в той же папке.",
         ])
-        print(report)
-        with open(args.log, "w", encoding="utf-8") as f:
+        # print(report)  # полный отчёт в консоль — при необходимости раскомментировать
+        with open(md_path, "w", encoding="utf-8") as f:
             f.write(report + "\n")
+        print(f"Прочитано: {', '.join(os.path.relpath(p, ROOT) for p in paths)} "
+              f"({len(res)} строк, моделей: {res['model'].nunique()})")
+        if warnings:
+            print("ВНИМАНИЕ: не у всех моделей 5 seed:\n" + "\n".join(warnings))
+        print(f"Отчёт: {os.path.relpath(md_path, ROOT)}")
+        print(f"Числа без округления: {os.path.relpath(os.path.join(args.out_dir, 'h1_table.csv'), ROOT)}, "
+              f"{os.path.relpath(os.path.join(args.out_dir, 'h1_diff.csv'), ROOT)}")
 
         run.set(metrics={f"{r.model}:{r.metric}": round(float(r.diff_A_minus_B), 4)
                          for r in diff.itertuples() if not r.metric.startswith("dedup_")},
