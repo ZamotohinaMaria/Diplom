@@ -19,13 +19,15 @@ import argparse
 import os
 import sys
 
+import numpy as np
 import pandas as pd
 
 from log_run import DATASET_CSV, ROOT, tracked_run
 
 GINE_DIR = os.path.join(ROOT, "my-GINE-model upgrade 1")
 sys.path.insert(0, GINE_DIR)
-from run_splits import split_raw_dataset  # noqa: E402  (тянет torch: так устроен run_splits.py)
+# путь добавлен через sys.path строкой выше, поэтому Pylance этот модуль не видит; импорт тянет torch
+from run_splits import split_raw_dataset  # type: ignore  # noqa: E402
 
 ROW_COL = "_row_idx"  # номер строки исходного CSV; split_raw_dataset сбрасывает индекс, а столбец сохраняет
 
@@ -48,8 +50,9 @@ def load_hashes(path: str, df: pd.DataFrame) -> pd.DataFrame:
     if not os.path.exists(path):
         raise FileNotFoundError(f"{path} не найден: сначала запусти experiments/audit_duplicates.py")
     h = pd.read_csv(path)
-    if len(h) != len(df) or not (h["sha256_file"].values == df["sha256"].values).all() \
-            or not (h["label"].values == df["labels"].astype(int).values).all():
+    # np.array_equal сам вернёт False и при разной длине
+    if not np.array_equal(h["sha256_file"].to_numpy(), df["sha256"].to_numpy()) \
+            or not np.array_equal(h["label"].to_numpy(), df["labels"].astype(int).to_numpy()):
         raise ValueError(f"{path} не соответствует {DATASET_CSV}: перезапусти audit_duplicates.py")
     return h.set_index("row_idx")
 
@@ -133,7 +136,7 @@ def main():
         with open(args.log, "w", encoding="utf-8") as f:
             f.write(report + "\n")
 
-        run.set(metrics={"share_all_by_seed": {int(r.seed): round(r.share_all, 4) for r in res.itertuples()},
+        run.set(metrics={"share_all_by_seed": {int(s): round(float(v), 4) for s, v in zip(res["seed"], res["share_all"])},
                          "share_all_mean": round(res.share_all.mean(), 4),
                          "share_all_std": round(res.share_all.std(ddof=1), 4),
                          "share_malware_mean": round(res.share_malware.mean(), 4),
@@ -142,5 +145,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore  (метод есть у консоли, Pylance его не знает)
     main()

@@ -61,8 +61,9 @@ def load_hashes(hashes_path: str, csv_path: str) -> pd.DataFrame:
         raise FileNotFoundError(f"{hashes_path} не найден: сначала запусти experiments/audit_duplicates.py")
     h = pd.read_csv(hashes_path)
     df = pd.read_csv(csv_path, usecols=["sha256", "labels"])
-    if len(h) != len(df) or not (h["sha256_file"].values == df["sha256"].values).all() \
-            or not (h["label"].values == df["labels"].astype(int).values).all():
+    # np.array_equal сам вернёт False и при разной длине
+    if not np.array_equal(h["sha256_file"].to_numpy(), df["sha256"].to_numpy()) \
+            or not np.array_equal(h["label"].to_numpy(), df["labels"].astype(int).to_numpy()):
         raise ValueError(f"{hashes_path} не соответствует {csv_path}: перезапусти audit_duplicates.py")
     return h
 
@@ -97,12 +98,12 @@ def assign_groups_balanced(h: pd.DataFrame, seed: int) -> np.ndarray:
             k = int(np.argmin(load))
             load[k] += size
             fold_of_group[seq_hash] = int(perm[k])
-    return h["seq_hash"].map(fold_of_group).values
+    return h["seq_hash"].map(fold_of_group).to_numpy()
 
 
 def assign_folds(h: pd.DataFrame, protocol: str, seed: int, group_method: str = "balanced") -> np.ndarray:
     """Номер фолда (0..4) для каждой строки h."""
-    y = h["label"].values
+    y = h["label"].to_numpy()
     if protocol == "B" and group_method == "balanced":
         return assign_groups_balanced(h, seed)
     if protocol == "A":
@@ -110,7 +111,7 @@ def assign_folds(h: pd.DataFrame, protocol: str, seed: int, group_method: str = 
         folds = splitter.split(np.zeros(len(h)), y)
     else:
         splitter = StratifiedGroupKFold(n_splits=N_FOLDS, shuffle=True, random_state=seed)
-        folds = splitter.split(np.zeros(len(h)), y, groups=h["seq_hash"].values)
+        folds = splitter.split(np.zeros(len(h)), y, groups=h["seq_hash"].to_numpy())
     fold_of = np.full(len(h), -1)
     for k, (_, test_idx) in enumerate(folds):
         fold_of[test_idx] = k
@@ -236,5 +237,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore  (метод есть у консоли, Pylance его не знает)
     main()

@@ -64,7 +64,11 @@ def summary_table(h: pd.DataFrame) -> pd.DataFrame:
         """[всего, benign, malware] для маски строк или функции от подтаблицы."""
         out = []
         for part in [h, h[h.label == 0], h[h.label == 1]]:
-            out.append(int(func(part)) if func else int(mask.loc[part.index].sum()))
+            if func is not None:
+                out.append(int(func(part)))
+            else:
+                assert mask is not None, "нужно передать mask или func"
+                out.append(int(mask.loc[part.index].sum()))
         return out
 
     rows = [
@@ -143,7 +147,7 @@ def main():
                 "rows": t.loc["Всего строк"].to_dict(),
                 "unique": t.loc["Уникальных последовательностей"].to_dict(),
                 "rows_in_dup_groups": t.loc["Строк в группах дублей (группа >= 2 строк)"].to_dict(),
-                "conflict_sequences": int(t.loc["Последовательностей с разными метками", "all"]),
+                "conflict_sequences": int((h.groupby("seq_hash")["label"].nunique() > 1).sum()),
                 "top5_sizes": top["size"].tolist(),
             },
             notes=f"outputs: {os.path.relpath(hashes_csv, ROOT)}, {os.path.relpath(table_csv, ROOT)}, "
@@ -152,5 +156,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore  (метод есть у консоли, Pylance его не знает)
     main()
