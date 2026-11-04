@@ -76,10 +76,11 @@ def drop_conflicts(h: pd.DataFrame):
     return h[~mask].reset_index(drop=True), h[mask], conflict
 
 
-def assign_groups_balanced(h: pd.DataFrame, seed: int) -> np.ndarray:
+def assign_groups_balanced(h: pd.DataFrame, seed: int, group_col: str = "seq_hash") -> np.ndarray:
     """Групповое разбиение с равными размерами фолдов и долями классов.
 
-    После исключения конфликтов каждая группа (seq_hash) целиком одного класса, поэтому классы
+    group_col — столбец с номером группы: seq_hash для B, group_c для C (make_split_c.py).
+    После исключения конфликтов каждая группа целиком одного класса, поэтому классы
     раскладываются независимо. Внутри класса группы идут от больших к меньшим (равные по размеру —
     в случайном порядке по seed), и каждая кладётся в фолд, где строк этого класса пока меньше всего
     (жадный алгоритм LPT). Затем номера фолдов случайно переставляются (по seed), чтобы test/val
@@ -87,18 +88,18 @@ def assign_groups_balanced(h: pd.DataFrame, seed: int) -> np.ndarray:
     Следствие: 5 крупнейших групп malware всегда оказываются в 5 разных фолдах.
     """
     rng = np.random.default_rng(seed)
-    groups = h.groupby("seq_hash").agg(size=("row_idx", "size"), label=("label", "first")).reset_index()
+    groups = h.groupby(group_col).agg(size=("row_idx", "size"), label=("label", "first")).reset_index()
     fold_of_group = {}
     for cls in (0, 1):
         g = groups[groups.label == cls].sample(frac=1, random_state=seed)        # случайный порядок
         g = g.sort_values("size", ascending=False, kind="stable")                # большие первыми
         load = np.zeros(N_FOLDS)
         perm = rng.permutation(N_FOLDS)
-        for seq_hash, size in zip(g["seq_hash"], g["size"]):
+        for key, size in zip(g[group_col], g["size"]):
             k = int(np.argmin(load))
             load[k] += size
-            fold_of_group[seq_hash] = int(perm[k])
-    return h["seq_hash"].map(fold_of_group).to_numpy()
+            fold_of_group[key] = int(perm[k])
+    return h[group_col].map(fold_of_group).to_numpy()
 
 
 def assign_folds(h: pd.DataFrame, protocol: str, seed: int, group_method: str = "balanced") -> np.ndarray:
