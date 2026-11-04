@@ -1,0 +1,18 @@
+GINE (конфигурация e40), device=cpu. Эпоха, температура и пороги выбраны на val; метрики — на test.
+
+Пояснение к столбцам:
+  best_epoch     — эпоха с лучшим MCC на val (при пороге 0.5)
+  mcc, f1        — при пороге, выбранном по MCC на val
+  pr_auc, roc_auc — от порога не зависят
+  fpr_at_tpr95   — доля benign в test, ложно отмеченных как malware, при пороге, который на val
+                   ловит 95% malware; tpr_at_tpr95 — сколько malware этот порог реально поймал на test
+  dedup_*        — те же метрики на test, где каждая последовательность учтена один раз
+  n_test / n_test_dedup — строк в test всего / уникальных последовательностей
+  vocab_size     — размер словаря API (только по train, включая <UNK>)
+  oov_seq_share  — доля трасс test, где есть API, не встречавшийся в train
+  train_sec      — время обучения, секунд
+
+protocol  seed  best_epoch    mcc     f1  pr_auc  roc_auc  fpr_at_tpr95  tpr_at_tpr95  dedup_mcc  dedup_pr_auc  n_test  n_test_dedup  vocab_size  oov_seq_share  train_sec
+       C    42          36 0.8869 0.9428  0.9901   0.9876        0.0391        0.9297     0.8299        0.9598     512           322         289         0.0020    51.4000
+
+Сохранено: C:\Users\Marishka\Desktop\code\Diplom\derived\results_pilot_C_gine.csv

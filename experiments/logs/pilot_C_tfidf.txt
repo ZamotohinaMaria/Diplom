@@ -1,0 +1,17 @@
+TF-IDF (n-граммы API 1–3) + LogReg. C и пороги выбраны на val; метрики — на test.
+
+Пояснение к столбцам:
+  C              — сила регуляризации LogReg, выбранная по MCC на val
+  mcc, f1        — при пороге, выбранном по MCC на val
+  pr_auc, roc_auc — от порога не зависят
+  fpr_at_tpr95   — доля benign в test, ложно отмеченных как malware, при пороге, который на val
+                   ловит 95% malware; tpr_at_tpr95 — сколько malware этот порог реально поймал на test
+  dedup_*        — те же метрики на test, где каждая последовательность учтена один раз
+  n_test / n_test_dedup — строк в test всего / уникальных последовательностей
+  oov_seq_share  — доля трасс test, где есть API, не встречавшийся в train
+  train_sec      — время обучения вместе с подбором C по val, секунд
+
+protocol  seed          C    mcc     f1  pr_auc  roc_auc  fpr_at_tpr95  tpr_at_tpr95  dedup_mcc  dedup_pr_auc  n_test  n_test_dedup  oov_seq_share  train_sec
+       C    42 10000.0000 0.9311 0.9639  0.9920   0.9904        0.0039        0.9375     0.8962        0.9652     512           322         0.0020     2.4000
+
+Сохранено: C:\Users\Marishka\Desktop\code\Diplom\derived\results_pilot_C_tfidf.csv
