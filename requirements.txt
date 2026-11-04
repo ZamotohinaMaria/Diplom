@@ -1,0 +1,10 @@
+# Библиотеки, которые импортируют experiments/ и my-GINE-model upgrade 1 (точные версии).
+# torch и torch-geometric ставить под свою CUDA/CPU по инструкциям проектов, см. ENVIRONMENT.md.
+# Создано experiments/collect_env.py
+numpy==2.1.3
+pandas==2.2.3
+scikit-learn==1.6.1
+scipy==1.15.3
+torch==2.7.1+cu118
+torch-geometric==2.7.0
+tabulate==0.9.0
