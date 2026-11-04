@@ -1,0 +1,57 @@
+Исходных строк: 2570
+Исключено строк с конфликтующими метками: 12 (последовательностей: 1; benign 5, malware 7)
+Осталось строк: 2558
+Строк с отсутствующим или некорректным sha256_file: 0
+Схема: 5 фолдов, фолд 0 -> test, фолд 1 -> val, остальные -> train
+Seed пилота: 42
+
+Группы C (компоненты связности по sha256_file и seq_hash):
+  групп C: 1589; для сравнения групп B (по seq_hash): 1600
+  групп C, объединивших несколько разных трасс: 11 (строк в них: 156)
+  групп C из нескольких файлов: 174
+
+Распределение размеров групп:
+  size  groups  rows  benign_groups  malware_groups
+     1    1400  1400           1038             362
+   2-5     153   365             71              82
+  6-20      26   253             10              16
+21-100       9   376              0               9
+  101+       1   164              0               1
+
+Пять крупнейших групп (n_files — разных файлов, n_seqs — разных трасс):
+ group_c  size  label  n_files  n_seqs
+    1300   164      1      162       1
+    1285    84      1       84       1
+    1303    64      1       63       2
+    1299    52      1       51       1
+    1367    43      1       42       2
+
+К1 — крупнейшая группа класса не больше фолда (fold_capacity = строк класса / 5):
+ label  rows  groups  largest  fold_capacity   K1
+     0  1280    1119       16          256.0 True
+     1  1278     470      164          255.6 True
+
+Пояснение к столбцам:
+  n_train / n_val / n_test         — число строк в каждой части
+  malware_share_*                  — доля malware в части (К3: 45–55%)
+  n_test_unique_seqs               — разных трасс в test
+  seqs_in_several_parts            — трасс, встречающихся больше чем в одной части (должно быть 0)
+  files_in_several_parts           — файлов (sha256_file) больше чем в одной части (должно быть 0)
+  largest_test_group[_label]       — размер (и класс) крупнейшей группы в test
+  largest_test_group_share_of_class — её доля от строк этого класса в test
+  largest_group_part               — в какую часть попала крупнейшая группа всего датасета
+  K2_sizes                         — test и val от 486 до 538 строк
+  K3_balance                       — доля malware во всех частях в пределах 45–55%
+
+protocol  seed  n_train malware_share_train  n_val malware_share_val  n_test malware_share_test  n_test_unique_seqs  seqs_in_several_parts  files_in_several_parts  largest_test_group  largest_test_group_label largest_test_group_share_of_class largest_group_part  K2_sizes  K3_balance
+       C    42     1534               49.9%    512             50.0%     512              50.0%                 322                      0                       0                  84                         1                             32.8%              train      True        True
+       C    43     1535               50.0%    511             49.9%     512              50.0%                 322                      0                       0                  64                         1                             25.0%              train      True        True
+       C    44     1534               49.9%    512             50.0%     512              50.0%                 307                      0                       0                 164                         1                             64.1%               test      True        True
+       C    45     1535               50.0%    511             49.9%     512              50.0%                 322                      0                       0                  84                         1                             32.8%              train      True        True
+       C    46     1534               49.9%    512             50.0%     512              50.0%                 321                      0                       0                  84                         1                             32.8%              train      True        True
+
+ВЫВОД: ПРИГОДЕН: все критерии выполнены для всех seed
+
+Сохранено: 5 файлов разбиений в C:\Users\Marishka\Desktop\code\Diplom\derived\splits
+           C:\Users\Marishka\Desktop\code\Diplom\derived\splits\summary_C.csv
+           C:\Users\Marishka\Desktop\code\Diplom\derived\splits\groups_C.csv
