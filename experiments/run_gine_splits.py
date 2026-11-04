@@ -20,10 +20,15 @@ temperature scaling.
   derived/predictions/gine_{A,B}_seed{N}.csv    вероятности на val и test
   derived/gine_models/gine_{A,B}_seed{N}.pt     веса лучшей эпохи (в git не попадают)
   experiments/logs/run_gine_splits.txt          текстовый отчёт
+  derived/configs/gine_{protocol}_seed{N}.json  конфигурация запуска (настройки, эпоха, температура, пороги)
+
+Пилот C (пункт 3, неделя 2–8.11; правила — в pilot_c_table.py): только C_seed42, один раз, на CPU.
+  derived/results_pilot_C_gine.csv, derived/predictions/gine_C_seed42.csv, experiments/logs/pilot_C_gine.txt
 
 Запуск из корня репозитория:
   python experiments/run_gine_splits.py
   python experiments/run_gine_splits.py --protocols A --seeds 42      # один прогон, чтобы оценить время
+  python experiments/run_gine_splits.py --protocols C --seeds 42 --device cpu   # пилот C
 """
 import argparse
 import os
@@ -34,9 +39,9 @@ import numpy as np
 import torch
 from torch_geometric.loader import DataLoader
 
-from eval_utils import (choose_threshold_mcc, evaluate_test, load_data, load_split, merge_results,
-                        oov_stats, rounded, save_predictions, split_path, threshold_at_tpr)
-from log_run import DATASET_CSV, ROOT, tracked_run
+from eval_utils import (choose_threshold_mcc, evaluate_test, is_pilot, load_data, load_split, merge_results,
+                        oov_stats, rounded, save_config, save_predictions, split_path, threshold_at_tpr)
+from log_run import DATASET_CSV, ROOT, file_sha256, tracked_run
 
 GINE_DIR = os.path.join(ROOT, "my-GINE-model upgrade 1")
 sys.path.insert(0, GINE_DIR)
@@ -49,8 +54,8 @@ from utils import set_seed  # type: ignore  # noqa: E402
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="GINE (конфигурация e40) на разбиениях A/B")
-    p.add_argument("--protocols", nargs="+", default=["A", "B"], choices=["A", "B"])
+    p = argparse.ArgumentParser(description="GINE (конфигурация e40) на разбиениях A/B (и пилот C)")
+    p.add_argument("--protocols", nargs="+", default=["A", "B"], choices=["A", "B", "C"])
     p.add_argument("--seeds", nargs="+", type=int, default=[42, 43, 44, 45, 46])
     # конфигурация e40 — не менять без причины, иначе это уже не «лучшая конфигурация из НИРС»
     p.add_argument("--hidden-dim", type=int, default=128)
@@ -68,11 +73,19 @@ def parse_args():
     p.add_argument("--select-metric", choices=["mcc", "f1"], default="mcc",
                    help="метрика на val для выбора эпохи (порог для отчёта всегда по MCC на val)")
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    p.add_argument("--out", default=os.path.join(ROOT, "derived", "results_gine.csv"))
+    p.add_argument("--out", default=None, help="по умолчанию derived/results_gine.csv (C: results_pilot_C_gine.csv)")
     p.add_argument("--pred-dir", default=os.path.join(ROOT, "derived", "predictions"))
     p.add_argument("--model-dir", default=os.path.join(ROOT, "derived", "gine_models"))
-    p.add_argument("--log", default=os.path.join(ROOT, "experiments", "logs", "run_gine_splits.txt"))
-    return p.parse_args()
+    p.add_argument("--config-dir", default=os.path.join(ROOT, "derived", "configs"))
+    p.add_argument("--log", default=None, help="по умолчанию experiments/logs/run_gine_splits.txt (C: pilot_C_gine.txt)")
+    args = p.parse_args()
+    # пилот C — в отдельные файлы, таблицы H1 не меняются
+    pilot = is_pilot(args.protocols)
+    if args.out is None:
+        args.out = os.path.join(ROOT, "derived", "results_pilot_C_gine.csv" if pilot else "results_gine.csv")
+    if args.log is None:
+        args.log = os.path.join(ROOT, "experiments", "logs", "pilot_C_gine.txt" if pilot else "run_gine_splits.txt")
+    return args
 
 
 def to_graphs(frame, vocab, args):
@@ -88,7 +101,8 @@ def loader(graphs, args, shuffle=False):
 def run_one(data, protocol: str, seed: int, args) -> dict:
     set_seed(seed)
     device = torch.device(args.device)
-    train, val, test = load_split(data, split_path(protocol, seed))
+    path = split_path(protocol, seed)
+    train, val, test = load_split(data, path)
 
     # словарь — только по train
     vocab = build_vocab(list(train["seq"]), min_token_freq=args.min_token_freq)
@@ -129,6 +143,16 @@ def run_one(data, protocol: str, seed: int, args) -> dict:
 
     save_predictions(os.path.join(args.pred_dir, f"gine_{protocol}_seed{seed}.csv"),
                      {"val": (val, p_va), "test": (test, p_te)})
+    save_config(os.path.join(args.config_dir, f"gine_{protocol}_seed{seed}.json"), {
+        "model": "gine_e40", "protocol": protocol, "seed": seed,
+        "split_file": os.path.relpath(path, ROOT), "split_sha256": file_sha256(path),
+        "settings": {k: v for k, v in vars(args).items()
+                     if k not in ("protocols", "seeds", "out", "pred_dir", "model_dir", "config_dir", "log")},
+        "selected_on_val": {"best_epoch": int(best_epoch), f"val_{args.select_metric}_at_0.5": float(best_val),
+                            "temperature": float(temperature), "thr_mcc": thr, "thr_tpr95": thr_tpr},
+        "vocab_size": len(vocab), "train_sec": round(train_sec, 1),
+        "model_file": os.path.relpath(model_path, ROOT),
+    })
     return row
 
 
@@ -137,7 +161,7 @@ def main():
     os.makedirs(os.path.dirname(args.log), exist_ok=True)
     data = load_data()
     params = {k: v for k, v in vars(args).items() if k not in ("protocols", "seeds", "out", "pred_dir",
-                                                                "model_dir", "log")}
+                                                                "model_dir", "config_dir", "log")}
     rows = []
     for protocol in args.protocols:
         for seed in args.seeds:

@@ -36,6 +36,14 @@ def split_path(protocol: str, seed: int, splits_dir: str = SPLITS_DIR) -> str:
     return os.path.join(splits_dir, f"{protocol}_seed{seed}.json")
 
 
+def is_pilot(protocols) -> bool:
+    """Пилот C (пункт 3, неделя 2–8.11) запускается отдельно от A/B и пишет результаты в свои файлы,
+    чтобы одна строка C не попала в таблицы H1 (там по 5 seed на протокол)."""
+    if "C" in protocols and list(protocols) != ["C"]:
+        raise ValueError("протокол C запускается отдельно: --protocols C")
+    return "C" in protocols
+
+
 def load_split(data: pd.DataFrame, path: str):
     """(train, val, test) — подтаблицы data по индексам из файла разбиения задачи 3."""
     with open(path, encoding="utf-8") as f:
@@ -112,6 +120,13 @@ def save_predictions(path: str, parts: dict) -> None:
                                   "seq_hash": frame["seq_hash"].to_numpy(), "prob": prob}))
     os.makedirs(os.path.dirname(path), exist_ok=True)
     pd.concat(rows).to_csv(path, index=False)
+
+
+def save_config(path: str, config: dict) -> None:
+    """Конфигурация одного запуска: все настройки и то, что выбрано на val (C, эпоха, температура, пороги)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(rounded(config, 6), f, ensure_ascii=False, indent=2, default=str)
 
 
 def merge_results(path: str, new_rows: list) -> pd.DataFrame:

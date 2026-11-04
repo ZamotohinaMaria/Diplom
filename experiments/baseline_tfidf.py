@@ -22,40 +22,54 @@
   derived/predictions/tfidf_ngram1_{A,B}_seed{N}.csv
   experiments/logs/baseline_tfidf_ngram1.txt
 
+Пилот C (пункт 3, неделя 2–8.11; правила — в pilot_c_table.py): только блок main, только C_seed42.
+  derived/results_pilot_C_tfidf.csv, derived/predictions/tfidf_C_seed42.csv,
+  experiments/logs/pilot_C_tfidf.txt
+
+Для каждого запуска конфигурация (настройки, выбранный C, пороги, время) сохраняется в
+derived/configs/{tfidf,tfidf_ngram1}_{protocol}_seed{N}.json.
+
 Запуск из корня репозитория:
   python experiments/baseline_tfidf.py                                 # оба блока
   python experiments/baseline_tfidf.py --blocks ngram1                 # только проверка на 1-граммах
   python experiments/baseline_tfidf.py --protocols B --seeds 42 43     # часть разбиений
+  python experiments/baseline_tfidf.py --protocols C --seeds 42 --blocks main   # пилот C
 """
 import argparse
 import os
 import sys
+import time
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import matthews_corrcoef
 
-from eval_utils import (choose_threshold_mcc, evaluate_test, load_data, load_split, merge_results,
-                        oov_stats, rounded, save_predictions, split_path, threshold_at_tpr)
-from log_run import DATASET_CSV, ROOT, tracked_run
+from eval_utils import (choose_threshold_mcc, evaluate_test, is_pilot, load_data, load_split, merge_results,
+                        oov_stats, rounded, save_config, save_predictions, split_path, threshold_at_tpr)
+from log_run import DATASET_CSV, ROOT, file_sha256, tracked_run
 
 # C = 1 / сила регуляризации. Сетка широкая: на пробе лучший C оказался 100, то есть на краю прежней сетки
 C_GRID = [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0]
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="TF-IDF (1–3-граммы API) + LogReg на разбиениях A/B")
-    p.add_argument("--protocols", nargs="+", default=["A", "B"], choices=["A", "B"])
+    p = argparse.ArgumentParser(description="TF-IDF (1–3-граммы API) + LogReg на разбиениях A/B (и пилот C)")
+    p.add_argument("--protocols", nargs="+", default=["A", "B"], choices=["A", "B", "C"])
     p.add_argument("--seeds", nargs="+", type=int, default=[42, 43, 44, 45, 46])
     p.add_argument("--blocks", nargs="+", default=["main", "ngram1"], choices=["main", "ngram1"])
     p.add_argument("--ngram-max", type=int, default=3, help="верхняя граница n-грамм для блока main")
     p.add_argument("--pred-dir", default=os.path.join(ROOT, "derived", "predictions"))
+    p.add_argument("--config-dir", default=os.path.join(ROOT, "derived", "configs"))
     return p.parse_args()
 
 
 # блок -> (модель, верхняя граница n-грамм, файл результатов, префикс предсказаний, отчёт)
 def block_config(block: str, args) -> dict:
+    if is_pilot(args.protocols):   # пилот C — в отдельные файлы, таблицы H1 не меняются
+        return {"model": "tfidf_logreg", "ngram_max": args.ngram_max,
+                "out": os.path.join(ROOT, "derived", "results_pilot_C_tfidf.csv"), "pred_prefix": "tfidf",
+                "log": os.path.join(ROOT, "experiments", "logs", "pilot_C_tfidf.txt")}
     if block == "main":
         return {"model": "tfidf_logreg", "ngram_max": args.ngram_max,
                 "out": os.path.join(ROOT, "derived", "results_tfidf.csv"), "pred_prefix": "tfidf",
@@ -91,7 +105,10 @@ def fit_one(train, val, ngram_max: int, seed: int):
 def run_one(data, protocol: str, seed: int, cfg: dict, args) -> dict:
     path = split_path(protocol, seed)
     train, val, test = load_split(data, path)
+    # время обучения — вместе с подбором C по val (все значения сетки)
+    t0 = time.time()
     vec, best = fit_one(train, val, cfg["ngram_max"], seed)
+    train_sec = time.time() - t0
 
     # пороги фиксируются по val
     y_va = val["label"].to_numpy()
@@ -102,12 +119,22 @@ def run_one(data, protocol: str, seed: int, cfg: dict, args) -> dict:
     p_te = best["clf"].predict_proba(vec.transform(" ".join(s) for s in test["seq"]))[:, 1]
     row = {"model": cfg["model"], "protocol": protocol, "seed": seed, "C": best["C"],
            "n_features": len(vec.vocabulary_), "thr_mcc": thr, "thr_tpr95": thr_tpr,
-           "val_mcc": best["val_mcc"]}
+           "val_mcc": best["val_mcc"], "train_sec": round(train_sec, 1)}
     row.update(evaluate_test(test, p_te, thr, thr_tpr))
     row.update(oov_stats(train["seq"], test["seq"]))
 
     save_predictions(os.path.join(args.pred_dir, f"{cfg['pred_prefix']}_{protocol}_seed{seed}.csv"),
                      {"val": (val, best["p_va"]), "test": (test, p_te)})
+    save_config(os.path.join(args.config_dir, f"{cfg['pred_prefix']}_{protocol}_seed{seed}.json"), {
+        "model": cfg["model"], "protocol": protocol, "seed": seed,
+        "split_file": os.path.relpath(path, ROOT), "split_sha256": file_sha256(path),
+        "settings": {"ngram_range": [1, cfg["ngram_max"]], "token_pattern": r"\S+", "lowercase": False,
+                     "sublinear_tf": True, "C_grid": C_GRID, "max_iter": 5000,
+                     "select_C": "max MCC on val", "threshold": "max MCC on val; TPR=0.95 on val"},
+        "selected_on_val": {"C": best["C"], "val_mcc": float(best["val_mcc"]),
+                            "thr_mcc": thr, "thr_tpr95": thr_tpr},
+        "n_features": len(vec.vocabulary_), "train_sec": round(train_sec, 1),
+    })
     return row
 
 
@@ -132,7 +159,8 @@ def run_block(data, block: str, args) -> None:
 
     res = merge_results(cfg["out"], rows)
     cols = ["protocol", "seed", "C", "mcc", "f1", "pr_auc", "roc_auc", "fpr_at_tpr95", "tpr_at_tpr95",
-            "dedup_mcc", "dedup_pr_auc", "n_test", "n_test_dedup", "oov_seq_share"]
+            "dedup_mcc", "dedup_pr_auc", "n_test", "n_test_dedup", "oov_seq_share", "train_sec"]
+    cols = [c for c in cols if c in res.columns]   # в старых строках A/B времени обучения нет
     report = "\n".join([
         "TF-IDF (n-граммы API 1–%d) + LogReg. C и пороги выбраны на val; метрики — на test." % cfg["ngram_max"],
         "",
@@ -145,6 +173,7 @@ def run_block(data, block: str, args) -> None:
         "  dedup_*        — те же метрики на test, где каждая последовательность учтена один раз",
         "  n_test / n_test_dedup — строк в test всего / уникальных последовательностей",
         "  oov_seq_share  — доля трасс test, где есть API, не встречавшийся в train",
+        "  train_sec      — время обучения вместе с подбором C по val, секунд",
         "",
         res[cols].to_string(index=False, float_format=lambda v: f"{v:.4f}"),
         "",
@@ -157,6 +186,8 @@ def run_block(data, block: str, args) -> None:
 
 def main():
     args = parse_args()
+    if is_pilot(args.protocols) and args.blocks != ["main"]:
+        raise ValueError("в пилоте C только основная модель: --blocks main")
     data = load_data()
     for block in ("main", "ngram1"):   # порядок фиксирован: сначала основная модель, проверка — в конце
         if block in args.blocks:
