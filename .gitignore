@@ -8,3 +8,4 @@
 *.npz
 /my-GINE-model upgrade 1/runs
 /my-GINE-model/runs
+*~$*
