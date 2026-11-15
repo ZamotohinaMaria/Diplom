@@ -27,8 +27,9 @@
 
 Нужны результаты:
   пилот  — derived/results_pilot_C_{tfidf,gine}.csv (уже есть)
-  серия  — python experiments/baseline_tfidf.py --protocols C --seeds 43 44 45 46 --blocks main
-           python experiments/run_gine_splits.py --protocols C --seeds 43 44 45 46 --device cpu
+  серия  — python experiments/baseline_tfidf.py --protocols C --seeds 43 44 45 46 --blocks main --run-name series_C
+           python experiments/run_gine_splits.py --protocols C --seeds 43 44 45 46 --device cpu --run-name series_C
+  Имена серий — параметры --pilot-name (по умолчанию pilot_C) и --run-name (по умолчанию series_C).
 
 Результаты:
   derived/series_C_table.md       отчёт: таблица по seed, среднее ± std, разница моделей, ошибки, проверки
@@ -52,10 +53,7 @@ from log_run import ROOT, file_sha256, tracked_run
 
 SEEDS = [42, 43, 44, 45, 46]
 PILOT_SEED = 42
-MODELS = {   # модель -> (префикс файлов, файл результатов пилота, файл результатов серии)
-    "tfidf_logreg": ("tfidf", "results_pilot_C_tfidf.csv", "results_C_tfidf.csv"),
-    "gine_e40": ("gine", "results_pilot_C_gine.csv", "results_C_gine.csv"),
-}
+MODELS = {"tfidf_logreg": "tfidf", "gine_e40": "gine"}   # модель -> префикс файлов
 NAMES = {"tfidf_logreg": "TF-IDF 1–3 + LR", "gine_e40": "GINE e40"}
 METRICS = ["mcc", "f1", "pr_auc", "roc_auc", "fpr_at_tpr95"]
 ERRORS = ["fp", "fn"]
@@ -66,15 +64,18 @@ def parse_args():
     p = argparse.ArgumentParser(description="Сводная таблица полной серии C (5 seed)")
     p.add_argument("--derived", default=os.path.join(ROOT, "derived"))
     p.add_argument("--out-dir", default=os.path.join(ROOT, "derived"))
+    p.add_argument("--pilot-name", default="pilot_C", help="имя серии пилота (seed 42) в baseline_tfidf / run_gine_splits")
+    p.add_argument("--run-name", default="series_C", help="имя серии seed 43–46 (--run-name при запуске моделей)")
     return p.parse_args()
 
 
 # ---------- сбор и проверки ----------
 
-def load_results(derived: str) -> pd.DataFrame:
+def load_results(derived: str, pilot_name: str, series_name: str) -> pd.DataFrame:
     """Строки C по обеим моделям: seed 42 — из пилота, 43–46 — из серии."""
     parts = []
-    for model, (_, pilot_file, series_file) in MODELS.items():
+    for model, prefix in MODELS.items():
+        pilot_file, series_file = f"results_{pilot_name}_{prefix}.csv", f"results_{series_name}_{prefix}.csv"
         for path, allowed in ((pilot_file, {PILOT_SEED}), (series_file, set(SEEDS) - {PILOT_SEED})):
             full = os.path.join(derived, path)
             if not os.path.exists(full):
@@ -96,7 +97,7 @@ def load_results(derived: str) -> pd.DataFrame:
 def check_configs(derived: str) -> list:
     """Настройки одинаковы по seed, GINE на CPU, разбиение не менялось. Возвращает строки для отчёта."""
     lines = []
-    for model, (prefix, _, _) in MODELS.items():
+    for model, prefix in MODELS.items():
         settings = {}
         for seed in SEEDS:
             path = os.path.join(derived, "configs", f"{prefix}_C_seed{seed}.json")
@@ -120,7 +121,7 @@ def error_counts(derived: str, res: pd.DataFrame) -> pd.DataFrame:
     """FP / FN по предсказаниям test при пороге MCC с val; заодно сверка MCC с файлом результатов."""
     rows = []
     for r in res.itertuples():
-        prefix = MODELS[r.model][0]
+        prefix = MODELS[r.model]
         pred = pd.read_csv(os.path.join(derived, "predictions", f"{prefix}_C_seed{r.seed}.csv"))
         test = pred[pred.part == "test"]
         with open(os.path.join(derived, "splits", f"C_seed{r.seed}.json"), encoding="utf-8") as f:
@@ -174,9 +175,10 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     md_path = os.path.join(args.out_dir, "series_C_table.md")
 
-    with tracked_run("series_c_table.py", params={"seeds": SEEDS, "pilot_seed": PILOT_SEED},
+    with tracked_run("series_c_table.py", params={"seeds": SEEDS, "pilot_seed": PILOT_SEED,
+                                                  "pilot_name": args.pilot_name, "run_name": args.run_name},
                      log_path=md_path, dataset_path=os.path.join(args.derived, "splits", "summary_C.csv")) as run:
-        res = load_results(args.derived)
+        res = load_results(args.derived, args.pilot_name, args.run_name)
         config_lines = check_configs(args.derived)
         per_seed = res.merge(error_counts(args.derived, res), on=["model", "seed"])
         per_seed["selected"] = [f"C = {r.C:g}" if r.model == "tfidf_logreg" else f"эпоха {int(r.best_epoch)}"

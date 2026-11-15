@@ -36,18 +36,25 @@ def split_path(protocol: str, seed: int, splits_dir: str = SPLITS_DIR) -> str:
     return os.path.join(splits_dir, f"{protocol}_seed{seed}.json")
 
 
-PILOT_C_SEED = 42   # пилот C (неделя 2–8.11) уже посчитан и входит в серию C без перезапуска
+def run_name(protocols, name=None) -> str:
+    """Имя серии запусков (--run-name): от него зависят файлы результатов и логов,
+    чтобы новая серия не смешивалась с прежними таблицами. Работает для любого протокола.
 
-
-def is_protocol_c(protocols, seeds) -> bool:
-    """Протокол C запускается отдельно от A/B и пишет результаты в свои файлы, чтобы строки C
-    не попали в таблицы H1. Seed 42 C — пилот: он уже посчитан и по правилам серии C
-    (0 - docs/conspects/week3) повторно не запускается, иначе перезапишутся его предсказания и конфигурация."""
+    name задан  -> results_{name}_{модель}.csv, logs/{name}_{модель}.txt (например, series_C).
+    name не задан -> как было до появления параметра, чтобы прежние команды давали прежние файлы:
+      A/B — без имени (results_tfidf.csv, results_gine.csv — таблицы H1);
+      C   — 'pilot_C' (пилот недели 2–8.11). C без имени запускается отдельно от A/B,
+            чтобы одна строка C не попала в таблицы H1."""
+    if name is not None:
+        return name
     if "C" in protocols and list(protocols) != ["C"]:
-        raise ValueError("протокол C запускается отдельно: --protocols C")
-    if "C" in protocols and PILOT_C_SEED in seeds:
-        raise ValueError(f"C seed {PILOT_C_SEED} — пилот, он уже входит в серию C; запускай --seeds 43 44 45 46")
-    return "C" in protocols
+        raise ValueError("протокол C без --run-name запускается отдельно: --protocols C")
+    return "pilot_C" if "C" in protocols else ""
+
+
+def results_file(kind: str, name: str) -> str:
+    """derived/results_{name}_{kind}.csv; без имени серии — derived/results_{kind}.csv (как раньше)."""
+    return os.path.join(ROOT, "derived", f"results_{name}_{kind}.csv" if name else f"results_{kind}.csv")
 
 
 def load_split(data: pd.DataFrame, path: str):

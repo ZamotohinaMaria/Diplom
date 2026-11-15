@@ -22,18 +22,21 @@ temperature scaling.
   experiments/logs/run_gine_splits.txt          текстовый отчёт
   derived/configs/gine_{protocol}_seed{N}.json  конфигурация запуска (настройки, эпоха, температура, пороги)
 
-Протокол C — отдельно от A/B (--protocols C), каждый seed один раз и только на CPU (--device cpu):
-  пилот (неделя 2–8.11, правила — в pilot_c_table.py), только C_seed42:
-    derived/results_pilot_C_gine.csv, experiments/logs/pilot_C_gine.txt
-  серия C (неделя 9–15.11, правила — в series_c_table.py), seed 43–46; seed 42 берётся из пилота
-  и повторно не запускается:
-    derived/results_C_gine.csv, experiments/logs/series_C_gine.txt
-  предсказания — derived/predictions/gine_C_seed{N}.csv
+Имя серии (--run-name, для любого протокола) отделяет файлы результатов и логов новой серии от прежних:
+  derived/results_{имя}_gine.csv, experiments/logs/{имя}_gine.txt (--out / --log задают пути явно).
+  Без --run-name всё как раньше:
+    A/B — файлы выше (таблицы H1);
+    C   — пилот (неделя 2–8.11, правила — в pilot_c_table.py), C_seed42 на CPU:
+          derived/results_pilot_C_gine.csv, experiments/logs/pilot_C_gine.txt.
+  Серия C (неделя 9–15.11, правила — в series_c_table.py): --run-name series_C, seed 43–46, --device cpu
+  (seed 42 — пилот, уже посчитан).
+  Предсказания, веса и конфигурации от имени серии не зависят: derived/predictions/gine_{protocol}_seed{N}.csv.
 
 Запуск из корня репозитория:
   python experiments/run_gine_splits.py
   python experiments/run_gine_splits.py --protocols A --seeds 42      # один прогон, чтобы оценить время
-  python experiments/run_gine_splits.py --protocols C --seeds 43 44 45 46 --device cpu   # серия C
+  python experiments/run_gine_splits.py --protocols C --seeds 42 --device cpu   # пилот C
+  python experiments/run_gine_splits.py --protocols C --seeds 43 44 45 46 --device cpu --run-name series_C
 """
 import argparse
 import os
@@ -44,7 +47,7 @@ import numpy as np
 import torch
 from torch_geometric.loader import DataLoader
 
-from eval_utils import (choose_threshold_mcc, evaluate_test, is_protocol_c, load_data, load_split, merge_results,
+from eval_utils import (choose_threshold_mcc, evaluate_test, results_file, run_name, load_data, load_split, merge_results,
                         oov_stats, rounded, save_config, save_predictions, split_path, threshold_at_tpr)
 from log_run import DATASET_CSV, ROOT, file_sha256, tracked_run
 
@@ -78,22 +81,26 @@ def parse_args():
     p.add_argument("--select-metric", choices=["mcc", "f1"], default="mcc",
                    help="метрика на val для выбора эпохи (порог для отчёта всегда по MCC на val)")
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    p.add_argument("--out", default=None, help="по умолчанию derived/results_gine.csv (C: results_C_gine.csv)")
+    p.add_argument("--run-name", default=None,
+                   help="имя серии: results_{имя}_gine.csv и logs/{имя}_gine.txt; без него — как раньше "
+                        "(A/B — results_gine.csv, C — пилот results_pilot_C_gine.csv)")
+    p.add_argument("--out", default=None, help="явный путь к файлу результатов (иначе — по имени серии)")
     p.add_argument("--pred-dir", default=os.path.join(ROOT, "derived", "predictions"))
     p.add_argument("--model-dir", default=os.path.join(ROOT, "derived", "gine_models"))
     p.add_argument("--config-dir", default=os.path.join(ROOT, "derived", "configs"))
-    p.add_argument("--log", default=None, help="по умолчанию experiments/logs/run_gine_splits.txt (C: series_C_gine.txt)")
+    p.add_argument("--log", default=None, help="явный путь к отчёту (иначе — по имени серии)")
     args = p.parse_args()
-    # C — в отдельные файлы, таблицы H1 не меняются
-    protocol_c = is_protocol_c(args.protocols, args.seeds)
-    if protocol_c and args.device != "cpu":
-        # на GPU результат при том же seed плавает (MCC 0.854 и 0.894 на копии B_seed42), на CPU повторяется
-        raise ValueError("на C GINE запускается только на CPU, как в пилоте: --device cpu")
+    name = run_name(args.protocols, args.run_name)
     if args.out is None:
-        args.out = os.path.join(ROOT, "derived", "results_C_gine.csv" if protocol_c else "results_gine.csv")
-    if args.log is None:
-        args.log = os.path.join(ROOT, "experiments", "logs", "series_C_gine.txt" if protocol_c else "run_gine_splits.txt")
+        args.out = results_file("gine", name)
+    if args.log is None:   # лог A/B без имени серии называется по-старому
+        args.log = os.path.join(ROOT, "experiments", "logs", f"{name}_gine.txt" if name else "run_gine_splits.txt")
     return args
+
+
+# аргументы, которые задают только пути и состав запуска, а не модель: в settings конфигурации не попадают,
+# чтобы конфигурации разных серий с одной моделью совпадали
+NOT_SETTINGS = ("protocols", "seeds", "run_name", "out", "pred_dir", "model_dir", "config_dir", "log")
 
 
 def to_graphs(frame, vocab, args):
@@ -154,8 +161,7 @@ def run_one(data, protocol: str, seed: int, args) -> dict:
     save_config(os.path.join(args.config_dir, f"gine_{protocol}_seed{seed}.json"), {
         "model": "gine_e40", "protocol": protocol, "seed": seed,
         "split_file": os.path.relpath(path, ROOT), "split_sha256": file_sha256(path),
-        "settings": {k: v for k, v in vars(args).items()
-                     if k not in ("protocols", "seeds", "out", "pred_dir", "model_dir", "config_dir", "log")},
+        "settings": {k: v for k, v in vars(args).items() if k not in NOT_SETTINGS},
         "selected_on_val": {"best_epoch": int(best_epoch), f"val_{args.select_metric}_at_0.5": float(best_val),
                             "temperature": float(temperature), "thr_mcc": thr, "thr_tpr95": thr_tpr},
         "vocab_size": len(vocab), "train_sec": round(train_sec, 1),
@@ -168,8 +174,7 @@ def main():
     args = parse_args()
     os.makedirs(os.path.dirname(args.log), exist_ok=True)
     data = load_data()
-    params = {k: v for k, v in vars(args).items() if k not in ("protocols", "seeds", "out", "pred_dir",
-                                                                "model_dir", "config_dir", "log")}
+    params = {k: v for k, v in vars(args).items() if k not in NOT_SETTINGS}
     rows = []
     for protocol in args.protocols:
         for seed in args.seeds:

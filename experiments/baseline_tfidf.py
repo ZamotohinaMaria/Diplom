@@ -22,13 +22,15 @@
   derived/predictions/tfidf_ngram1_{A,B}_seed{N}.csv
   experiments/logs/baseline_tfidf_ngram1.txt
 
-Протокол C — только блок main и отдельно от A/B (--protocols C):
-  пилот (неделя 2–8.11, правила — в pilot_c_table.py), только C_seed42:
-    derived/results_pilot_C_tfidf.csv, experiments/logs/pilot_C_tfidf.txt
-  серия C (неделя 9–15.11, правила — в series_c_table.py), seed 43–46; seed 42 берётся из пилота
-  и повторно не запускается:
-    derived/results_C_tfidf.csv, experiments/logs/series_C_tfidf.txt
-  предсказания — derived/predictions/tfidf_C_seed{N}.csv
+Имя серии (--run-name, для любого протокола) отделяет файлы результатов и логов новой серии от прежних:
+  derived/results_{имя}_tfidf.csv, experiments/logs/{имя}_tfidf.txt (блок ngram1 — {имя}_tfidf_ngram1).
+  Без --run-name всё как раньше:
+    A/B — файлы выше (таблицы H1);
+    C   — пилот (неделя 2–8.11, правила — в pilot_c_table.py): только блок main,
+          derived/results_pilot_C_tfidf.csv, experiments/logs/pilot_C_tfidf.txt.
+  Серия C (неделя 9–15.11, правила — в series_c_table.py): --run-name series_C, seed 43–46
+  (seed 42 — пилот, уже посчитан).
+  Предсказания и конфигурации от имени серии не зависят: derived/predictions/tfidf_{protocol}_seed{N}.csv.
 
 Для каждого запуска конфигурация (настройки, выбранный C, пороги, время) сохраняется в
 derived/configs/{tfidf,tfidf_ngram1}_{protocol}_seed{N}.json.
@@ -37,7 +39,8 @@ derived/configs/{tfidf,tfidf_ngram1}_{protocol}_seed{N}.json.
   python experiments/baseline_tfidf.py                                 # оба блока
   python experiments/baseline_tfidf.py --blocks ngram1                 # только проверка на 1-граммах
   python experiments/baseline_tfidf.py --protocols B --seeds 42 43     # часть разбиений
-  python experiments/baseline_tfidf.py --protocols C --seeds 43 44 45 46 --blocks main   # серия C
+  python experiments/baseline_tfidf.py --protocols C --seeds 42 --blocks main            # пилот C
+  python experiments/baseline_tfidf.py --protocols C --seeds 43 44 45 46 --blocks main --run-name series_C
 """
 import argparse
 import os
@@ -49,7 +52,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import matthews_corrcoef
 
-from eval_utils import (choose_threshold_mcc, evaluate_test, is_protocol_c, load_data, load_split, merge_results,
+from eval_utils import (choose_threshold_mcc, evaluate_test, results_file, run_name, load_data, load_split, merge_results,
                         oov_stats, rounded, save_config, save_predictions, split_path, threshold_at_tpr)
 from log_run import DATASET_CSV, ROOT, file_sha256, tracked_run
 
@@ -65,22 +68,23 @@ def parse_args():
     p.add_argument("--ngram-max", type=int, default=3, help="верхняя граница n-грамм для блока main")
     p.add_argument("--pred-dir", default=os.path.join(ROOT, "derived", "predictions"))
     p.add_argument("--config-dir", default=os.path.join(ROOT, "derived", "configs"))
+    p.add_argument("--run-name", default=None,
+                   help="имя серии: results_{имя}_tfidf.csv и logs/{имя}_tfidf.txt; без него — как раньше "
+                        "(A/B — results_tfidf.csv, C — пилот results_pilot_C_tfidf.csv)")
     return p.parse_args()
 
 
 # блок -> (модель, верхняя граница n-грамм, файл результатов, префикс предсказаний, отчёт)
 def block_config(block: str, args) -> dict:
-    if is_protocol_c(args.protocols, args.seeds):   # C — в отдельные файлы, таблицы H1 не меняются
-        return {"model": "tfidf_logreg", "ngram_max": args.ngram_max,
-                "out": os.path.join(ROOT, "derived", "results_C_tfidf.csv"), "pred_prefix": "tfidf",
-                "log": os.path.join(ROOT, "experiments", "logs", "series_C_tfidf.txt")}
-    if block == "main":
-        return {"model": "tfidf_logreg", "ngram_max": args.ngram_max,
-                "out": os.path.join(ROOT, "derived", "results_tfidf.csv"), "pred_prefix": "tfidf",
-                "log": os.path.join(ROOT, "experiments", "logs", "baseline_tfidf.txt")}
-    return {"model": "tfidf_logreg_ngram1", "ngram_max": 1,
-            "out": os.path.join(ROOT, "derived", "results_tfidf_ngram1.csv"), "pred_prefix": "tfidf_ngram1",
-            "log": os.path.join(ROOT, "experiments", "logs", "baseline_tfidf_ngram1.txt")}
+    name = run_name(args.protocols, args.run_name)
+    kind = "tfidf" if block == "main" else "tfidf_ngram1"
+    # логи A/B без имени серии называются по-старому
+    log = f"{name}_{kind}.txt" if name else {"tfidf": "baseline_tfidf.txt",
+                                             "tfidf_ngram1": "baseline_tfidf_ngram1.txt"}[kind]
+    return {"model": "tfidf_logreg" if block == "main" else "tfidf_logreg_ngram1",
+            "ngram_max": args.ngram_max if block == "main" else 1,
+            "out": results_file(kind, name), "pred_prefix": kind,
+            "log": os.path.join(ROOT, "experiments", "logs", log)}
 
 
 def make_vectorizer(ngram_max: int) -> TfidfVectorizer:
@@ -190,8 +194,8 @@ def run_block(data, block: str, args) -> None:
 
 def main():
     args = parse_args()
-    if is_protocol_c(args.protocols, args.seeds) and args.blocks != ["main"]:
-        raise ValueError("на C только основная модель: --blocks main")
+    if args.run_name is None and run_name(args.protocols) == "pilot_C" and args.blocks != ["main"]:
+        raise ValueError("в пилоте C только основная модель: --blocks main")
     data = load_data()
     for block in ("main", "ngram1"):   # порядок фиксирован: сначала основная модель, проверка — в конце
         if block in args.blocks:
