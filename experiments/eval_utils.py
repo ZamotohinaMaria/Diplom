@@ -36,11 +36,17 @@ def split_path(protocol: str, seed: int, splits_dir: str = SPLITS_DIR) -> str:
     return os.path.join(splits_dir, f"{protocol}_seed{seed}.json")
 
 
-def is_pilot(protocols) -> bool:
-    """Пилот C (пункт 3, неделя 2–8.11) запускается отдельно от A/B и пишет результаты в свои файлы,
-    чтобы одна строка C не попала в таблицы H1 (там по 5 seed на протокол)."""
+PILOT_C_SEED = 42   # пилот C (неделя 2–8.11) уже посчитан и входит в серию C без перезапуска
+
+
+def is_protocol_c(protocols, seeds) -> bool:
+    """Протокол C запускается отдельно от A/B и пишет результаты в свои файлы, чтобы строки C
+    не попали в таблицы H1. Seed 42 C — пилот: он уже посчитан и по правилам серии C
+    (0 - docs/conspects/week3) повторно не запускается, иначе перезапишутся его предсказания и конфигурация."""
     if "C" in protocols and list(protocols) != ["C"]:
         raise ValueError("протокол C запускается отдельно: --protocols C")
+    if "C" in protocols and PILOT_C_SEED in seeds:
+        raise ValueError(f"C seed {PILOT_C_SEED} — пилот, он уже входит в серию C; запускай --seeds 43 44 45 46")
     return "C" in protocols
 
 

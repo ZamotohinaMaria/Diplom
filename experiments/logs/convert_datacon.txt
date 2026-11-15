@@ -1,0 +1,21 @@
+Источник: C:\Users\Marishka\Desktop\code\Diplom\DataCon 2019 Stage1
+Разобрано файлов: 30000, взято с меткой: 30000
+Проблемы: нет
+
+raw  : строк 30000 (malware 10000, benign 20000), длина медиана 22, min 2, max 61, уникальных последовательностей 11035 (36.8%)
+clean: строк 29999 (malware 10000, benign 19999), длина медиана 15, min 1, max 51, уникальных последовательностей 9204 (30.7%)
+Выпало из clean (пустая последовательность): 1
+
+Словарь: всего 93, служебных 12, настоящих API 81; из них есть в MalBehavD-V1: 53 (словарь MalBehavD-V1: 291)
+Служебные записи: AnalyzeStart, Fake_BeCreatedEx, TryToAnalyze, AnalyzeStop, Fake_DetectDebugger, Fake_WritePEFile, TooManyBehavior, Fake_SetFileHiddenOrReadOnly, UnpackSelf, Fake_TerminateRemoteProcess, Fake_SetFileCreationTime, Fake_BeInjected
+
+[Признаки, не связанные со смыслом поведения, по классам]
+         xml_MB_median  n_actions_median  len_raw_median  len_clean_median  has_reboot_share  too_many_behavior_share  n_pids_median
+labels                                                                                                                              
+benign           0.039             112.0            17.0              11.0             0.012                    0.146            1.0
+malware          1.102            2777.0            33.0              25.0             0.390                    0.764           20.0
+
+Сохранено: derived/datacon\datacon_raw.csv
+           derived/datacon\datacon_clean.csv
+           derived/datacon\datacon_meta.csv
+           derived/datacon\datacon_vocab.csv

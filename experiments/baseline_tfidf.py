@@ -22,9 +22,13 @@
   derived/predictions/tfidf_ngram1_{A,B}_seed{N}.csv
   experiments/logs/baseline_tfidf_ngram1.txt
 
-Пилот C (пункт 3, неделя 2–8.11; правила — в pilot_c_table.py): только блок main, только C_seed42.
-  derived/results_pilot_C_tfidf.csv, derived/predictions/tfidf_C_seed42.csv,
-  experiments/logs/pilot_C_tfidf.txt
+Протокол C — только блок main и отдельно от A/B (--protocols C):
+  пилот (неделя 2–8.11, правила — в pilot_c_table.py), только C_seed42:
+    derived/results_pilot_C_tfidf.csv, experiments/logs/pilot_C_tfidf.txt
+  серия C (неделя 9–15.11, правила — в series_c_table.py), seed 43–46; seed 42 берётся из пилота
+  и повторно не запускается:
+    derived/results_C_tfidf.csv, experiments/logs/series_C_tfidf.txt
+  предсказания — derived/predictions/tfidf_C_seed{N}.csv
 
 Для каждого запуска конфигурация (настройки, выбранный C, пороги, время) сохраняется в
 derived/configs/{tfidf,tfidf_ngram1}_{protocol}_seed{N}.json.
@@ -33,7 +37,7 @@ derived/configs/{tfidf,tfidf_ngram1}_{protocol}_seed{N}.json.
   python experiments/baseline_tfidf.py                                 # оба блока
   python experiments/baseline_tfidf.py --blocks ngram1                 # только проверка на 1-граммах
   python experiments/baseline_tfidf.py --protocols B --seeds 42 43     # часть разбиений
-  python experiments/baseline_tfidf.py --protocols C --seeds 42 --blocks main   # пилот C
+  python experiments/baseline_tfidf.py --protocols C --seeds 43 44 45 46 --blocks main   # серия C
 """
 import argparse
 import os
@@ -45,7 +49,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import matthews_corrcoef
 
-from eval_utils import (choose_threshold_mcc, evaluate_test, is_pilot, load_data, load_split, merge_results,
+from eval_utils import (choose_threshold_mcc, evaluate_test, is_protocol_c, load_data, load_split, merge_results,
                         oov_stats, rounded, save_config, save_predictions, split_path, threshold_at_tpr)
 from log_run import DATASET_CSV, ROOT, file_sha256, tracked_run
 
@@ -54,7 +58,7 @@ C_GRID = [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0]
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="TF-IDF (1–3-граммы API) + LogReg на разбиениях A/B (и пилот C)")
+    p = argparse.ArgumentParser(description="TF-IDF (1–3-граммы API) + LogReg на разбиениях A/B (и C)")
     p.add_argument("--protocols", nargs="+", default=["A", "B"], choices=["A", "B", "C"])
     p.add_argument("--seeds", nargs="+", type=int, default=[42, 43, 44, 45, 46])
     p.add_argument("--blocks", nargs="+", default=["main", "ngram1"], choices=["main", "ngram1"])
@@ -66,10 +70,10 @@ def parse_args():
 
 # блок -> (модель, верхняя граница n-грамм, файл результатов, префикс предсказаний, отчёт)
 def block_config(block: str, args) -> dict:
-    if is_pilot(args.protocols):   # пилот C — в отдельные файлы, таблицы H1 не меняются
+    if is_protocol_c(args.protocols, args.seeds):   # C — в отдельные файлы, таблицы H1 не меняются
         return {"model": "tfidf_logreg", "ngram_max": args.ngram_max,
-                "out": os.path.join(ROOT, "derived", "results_pilot_C_tfidf.csv"), "pred_prefix": "tfidf",
-                "log": os.path.join(ROOT, "experiments", "logs", "pilot_C_tfidf.txt")}
+                "out": os.path.join(ROOT, "derived", "results_C_tfidf.csv"), "pred_prefix": "tfidf",
+                "log": os.path.join(ROOT, "experiments", "logs", "series_C_tfidf.txt")}
     if block == "main":
         return {"model": "tfidf_logreg", "ngram_max": args.ngram_max,
                 "out": os.path.join(ROOT, "derived", "results_tfidf.csv"), "pred_prefix": "tfidf",
@@ -186,8 +190,8 @@ def run_block(data, block: str, args) -> None:
 
 def main():
     args = parse_args()
-    if is_pilot(args.protocols) and args.blocks != ["main"]:
-        raise ValueError("в пилоте C только основная модель: --blocks main")
+    if is_protocol_c(args.protocols, args.seeds) and args.blocks != ["main"]:
+        raise ValueError("на C только основная модель: --blocks main")
     data = load_data()
     for block in ("main", "ngram1"):   # порядок фиксирован: сначала основная модель, проверка — в конце
         if block in args.blocks:

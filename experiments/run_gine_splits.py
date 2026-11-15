@@ -22,13 +22,18 @@ temperature scaling.
   experiments/logs/run_gine_splits.txt          текстовый отчёт
   derived/configs/gine_{protocol}_seed{N}.json  конфигурация запуска (настройки, эпоха, температура, пороги)
 
-Пилот C (пункт 3, неделя 2–8.11; правила — в pilot_c_table.py): только C_seed42, один раз, на CPU.
-  derived/results_pilot_C_gine.csv, derived/predictions/gine_C_seed42.csv, experiments/logs/pilot_C_gine.txt
+Протокол C — отдельно от A/B (--protocols C), каждый seed один раз и только на CPU (--device cpu):
+  пилот (неделя 2–8.11, правила — в pilot_c_table.py), только C_seed42:
+    derived/results_pilot_C_gine.csv, experiments/logs/pilot_C_gine.txt
+  серия C (неделя 9–15.11, правила — в series_c_table.py), seed 43–46; seed 42 берётся из пилота
+  и повторно не запускается:
+    derived/results_C_gine.csv, experiments/logs/series_C_gine.txt
+  предсказания — derived/predictions/gine_C_seed{N}.csv
 
 Запуск из корня репозитория:
   python experiments/run_gine_splits.py
   python experiments/run_gine_splits.py --protocols A --seeds 42      # один прогон, чтобы оценить время
-  python experiments/run_gine_splits.py --protocols C --seeds 42 --device cpu   # пилот C
+  python experiments/run_gine_splits.py --protocols C --seeds 43 44 45 46 --device cpu   # серия C
 """
 import argparse
 import os
@@ -39,7 +44,7 @@ import numpy as np
 import torch
 from torch_geometric.loader import DataLoader
 
-from eval_utils import (choose_threshold_mcc, evaluate_test, is_pilot, load_data, load_split, merge_results,
+from eval_utils import (choose_threshold_mcc, evaluate_test, is_protocol_c, load_data, load_split, merge_results,
                         oov_stats, rounded, save_config, save_predictions, split_path, threshold_at_tpr)
 from log_run import DATASET_CSV, ROOT, file_sha256, tracked_run
 
@@ -54,7 +59,7 @@ from utils import set_seed  # type: ignore  # noqa: E402
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="GINE (конфигурация e40) на разбиениях A/B (и пилот C)")
+    p = argparse.ArgumentParser(description="GINE (конфигурация e40) на разбиениях A/B (и C)")
     p.add_argument("--protocols", nargs="+", default=["A", "B"], choices=["A", "B", "C"])
     p.add_argument("--seeds", nargs="+", type=int, default=[42, 43, 44, 45, 46])
     # конфигурация e40 — не менять без причины, иначе это уже не «лучшая конфигурация из НИРС»
@@ -73,18 +78,21 @@ def parse_args():
     p.add_argument("--select-metric", choices=["mcc", "f1"], default="mcc",
                    help="метрика на val для выбора эпохи (порог для отчёта всегда по MCC на val)")
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    p.add_argument("--out", default=None, help="по умолчанию derived/results_gine.csv (C: results_pilot_C_gine.csv)")
+    p.add_argument("--out", default=None, help="по умолчанию derived/results_gine.csv (C: results_C_gine.csv)")
     p.add_argument("--pred-dir", default=os.path.join(ROOT, "derived", "predictions"))
     p.add_argument("--model-dir", default=os.path.join(ROOT, "derived", "gine_models"))
     p.add_argument("--config-dir", default=os.path.join(ROOT, "derived", "configs"))
-    p.add_argument("--log", default=None, help="по умолчанию experiments/logs/run_gine_splits.txt (C: pilot_C_gine.txt)")
+    p.add_argument("--log", default=None, help="по умолчанию experiments/logs/run_gine_splits.txt (C: series_C_gine.txt)")
     args = p.parse_args()
-    # пилот C — в отдельные файлы, таблицы H1 не меняются
-    pilot = is_pilot(args.protocols)
+    # C — в отдельные файлы, таблицы H1 не меняются
+    protocol_c = is_protocol_c(args.protocols, args.seeds)
+    if protocol_c and args.device != "cpu":
+        # на GPU результат при том же seed плавает (MCC 0.854 и 0.894 на копии B_seed42), на CPU повторяется
+        raise ValueError("на C GINE запускается только на CPU, как в пилоте: --device cpu")
     if args.out is None:
-        args.out = os.path.join(ROOT, "derived", "results_pilot_C_gine.csv" if pilot else "results_gine.csv")
+        args.out = os.path.join(ROOT, "derived", "results_C_gine.csv" if protocol_c else "results_gine.csv")
     if args.log is None:
-        args.log = os.path.join(ROOT, "experiments", "logs", "pilot_C_gine.txt" if pilot else "run_gine_splits.txt")
+        args.log = os.path.join(ROOT, "experiments", "logs", "series_C_gine.txt" if protocol_c else "run_gine_splits.txt")
     return args
 
 
