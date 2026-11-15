@@ -185,6 +185,8 @@
 | Файл | Что делает / что изменено | Читает | Пишет |
 |---|---|---|---|
 | [series_c_table.py](experiments/series_c_table.py) | **Новый.** Итог серии C. Правила серии в docstring. Сначала проверяет: у каждой модели ровно seed 42–46 (42 — из пилота, 43–46 — из серии); настройки всех seed совпадают с пилотом, GINE везде на CPU; файлы разбиений не менялись; MCC, пересчитанный по предсказаниям, совпадает с файлом результатов. При нарушении останавливается. Затем считает: метрики по seed, среднее ± std (ddof = 1) по всем строкам и уникальным трассам, разницу GINE − TF-IDF на одних и тех же test, ложные тревоги и пропуски. Имена серий — `--pilot-name` (по умолчанию `pilot_C`), `--run-name` (по умолчанию `series_C`) | `derived/results_{pilot_C,series_C}_{tfidf,gine}.csv`, `derived/configs/*_C_seed*.json`, `derived/predictions/*_C_seed*.csv`, `derived/splits/` | `derived/series_C_table.md`, `series_C_per_seed.csv`, `series_C_summary.csv`, `series_C_paired.csv` |
+| [convert_datacon.py](experiments/convert_datacon.py) | **Новый.** Второй датасет: DataCon 2019 Stage1 (XML-отчёты песочницы, 30 000 файлов train) → формат MalBehavD-V1 в двух вариантах: raw (все записи) и clean (без служебных записей песочницы). Метки — из `safe_type_train.csv`, папка `test/` (без меток) не используется. `--limit N` — проба на N файлах каждого класса | `DataCon 2019 Stage1/` (не в git) | `derived/datacon/datacon_{raw,clean,meta,vocab}.csv`, `experiments/logs/convert_datacon.txt` |
+| [describe_datacon.py](experiments/describe_datacon.py) | **Новый.** Первичное описание DataCon: сравнение с MalBehavD-V1, длины, размеры групп повторов, конфликтующие метки, признаки-«подсказки» отчёта (размер XML, число вызовов и процессов) с ROC-AUC каждого признака, словарь. Дубли считает `audit_duplicates.py --csv …` (без изменений кода) | `derived/datacon/*.csv`, исходный CSV MalBehavD-V1 | `derived/datacon/datacon_describe.md`, `experiments/logs/describe_datacon.txt` |
 | [series_c_errors.py](experiments/series_c_errors.py) | **Новый.** Разбор ошибок серии C по сохранённым предсказаниям (модели не обучает): совпадение ошибок TF-IDF и GINE на уникальных трассах, ошибки по размеру группы C, крупнейшая группа test в каждом seed. Порог — по MCC на val | `derived/results_{pilot_C,series_C}_*.csv`, `derived/predictions/*_C_seed*.csv`, `derived/splits/groups_C.csv` | `derived/series_C_errors.md`, `series_C_errors_overlap.csv`, `series_C_errors_by_size.csv`, `series_C_largest_group.csv` |
 | [baseline_tfidf.py](experiments/baseline_tfidf.py) | **Изменён:** параметр `--run-name` (имя серии, любой протокол). Без него — прежние имена файлов. Обучение и оценка не менялись | — | `derived/results_{ИМЯ}_tfidf.csv`, `experiments/logs/{ИМЯ}_tfidf.txt` |
 | [run_gine_splits.py](experiments/run_gine_splits.py) | **Изменён:** параметр `--run-name`, как в TF-IDF; в `settings` конфигурации не попадает, чтобы конфигурации разных серий совпадали. Обучение и оценка не менялись | — | `derived/results_{ИМЯ}_gine.csv`, `experiments/logs/{ИМЯ}_gine.txt` |
@@ -208,6 +210,11 @@
 | `series_C_per_seed.csv` | `series_c_table.py` | Строка на (модель, seed): все метрики и матрица ошибок (`tn`, `fp`, `fn`, `tp`, те же с `dedup_`), числа без округления |
 | `series_C_summary.csv` | `series_c_table.py` | Среднее, std, min, max по seed для каждой модели и метрики |
 | `series_C_paired.csv` | `series_c_table.py` | Разница GINE − TF-IDF по каждому seed |
+| `datacon/datacon_raw.csv`, `datacon/datacon_clean.csv` | `convert_datacon.py` | DataCon в формате MalBehavD-V1 (`sha256, labels, 0, 1, …`): raw — 30 000 строк, clean — 29 999 |
+| `datacon/datacon_meta.csv` | `convert_datacon.py` | Строка на файл: метка, папка, размер XML, число вызовов, длины raw/clean, раздел `reboot`, число процессов, `TooManyBehavior`, ошибки разбора, `kept_raw` / `kept_clean` |
+| `datacon/datacon_vocab.csv` | `convert_datacon.py` | Словарь: в скольких файлах каждого класса встречается имя, служебное ли оно, есть ли в MalBehavD-V1 |
+| `datacon/audit_raw/`, `datacon/audit_clean/` | `audit_duplicates.py --csv …` | Аудит дублей DataCon (те же три файла, что у MalBehavD-V1) |
+| `datacon/datacon_describe.md` | `describe_datacon.py` | Отчёт первичного описания DataCon |
 | `series_C_errors.md` | `series_c_errors.py` | Отчёт разбора ошибок: совпадение ошибок моделей, ошибки по размеру группы, крупнейшая группа test |
 | `series_C_errors_overlap.csv`, `series_C_errors_by_size.csv`, `series_C_largest_group.csv` | `series_c_errors.py` | Те же таблицы по каждому seed |
 
@@ -215,7 +222,7 @@
 
 | Файл | Что это |
 |---|---|
-| [0 - docs/conspects/week3/](<0 - docs/conspects/week3/>) | П1 — протокол полной серии C; П2 — результаты серии: метрики по seed, сравнение моделей на одних test, влияние seed 44, разбор ошибок, сопоставление с пилотом и A/B (`.docx` и исходный `.md`) |
+| [0 - docs/conspects/week3/](<0 - docs/conspects/week3/>) | П1 — протокол полной серии C; П2 — результаты серии: метрики по seed, сравнение моделей на одних test, влияние seed 44, разбор ошибок, сопоставление с пилотом и A/B; П3 — конвертация DataCon 2019 Stage1 и первичное описание данных (`.docx` и исходный `.md`) |
 
 </details>
 

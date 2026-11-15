@@ -44,6 +44,8 @@ PIPELINE = [
     ("pilot_c_table.py", "Неделя 2, пункт 3 — итог пилота C"),
     ("series_c_table.py", "Неделя 3, 12–13.11 — итог полной серии C"),
     ("series_c_errors.py", "Неделя 3, 12–13.11 — разбор ошибок серии C"),
+    ("convert_datacon.py", "Второй датасет — конвертация DataCon 2019 Stage1"),
+    ("describe_datacon.py", "Второй датасет — первичное описание DataCon 2019 Stage1"),
     ("collect_env.py", "Неделя 2, пункт 4 — окружение и карта скриптов"),
     ("log_run.py", "Модуль журнала EXPERIMENTS.csv"),
     ("eval_utils.py", "Общие функции оценки"),

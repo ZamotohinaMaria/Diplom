@@ -16,10 +16,11 @@
 | 8 | [pilot_c_table.py](pilot_c_table.py) | Неделя 2, пункт 3 — итог пилота C | Пункт 3 (неделя 2–8.11.2026), итог: таблица пилота на разбиении C. |
 | 9 | [series_c_table.py](series_c_table.py) | Неделя 3, 12–13.11 — итог полной серии C | Задача 12–13.11 (неделя 9–15.11.2026), итог: полная серия C — TF-IDF и GINE на пяти разбиениях C. |
 | 10 | [series_c_errors.py](series_c_errors.py) | Неделя 3, 12–13.11 — разбор ошибок серии C | Задача 12–13.11 (неделя 9–15.11.2026), разбор ошибок полной серии C (TF-IDF и GINE, seed 42–46). |
-| 11 | [collect_env.py](collect_env.py) | Неделя 2, пункт 4 — окружение и карта скриптов | Пункт 4 (неделя 2–8.11.2026). Окружение и карта скриптов — для воспроизводимости. |
-| 12 | [log_run.py](log_run.py) | Модуль журнала EXPERIMENTS.csv | Журнал запусков: строка в EXPERIMENTS.csv появляется в начале запуска (status=running) |
-| 13 | [eval_utils.py](eval_utils.py) | Общие функции оценки | Общие функции задачи 4: загрузка данных и разбиений, подбор порогов на val, метрики на test. |
-| 14 | [convert_datacon.py](convert_datacon.py) | не внесён в порядок пайплайна (collect_env.py, PIPELINE) | Неделя 5 (второй датасет). Перевод DataCon 2019 Stage1 в формат MalBehavD-V1. |
+| 11 | [convert_datacon.py](convert_datacon.py) | Второй датасет — конвертация DataCon 2019 Stage1 | Неделя 5 (второй датасет). Перевод DataCon 2019 Stage1 в формат MalBehavD-V1. |
+| 12 | [describe_datacon.py](describe_datacon.py) | Второй датасет — первичное описание DataCon 2019 Stage1 | Неделя 5 (второй датасет). Первичное описание DataCon 2019 Stage1 после convert_datacon.py. |
+| 13 | [collect_env.py](collect_env.py) | Неделя 2, пункт 4 — окружение и карта скриптов | Пункт 4 (неделя 2–8.11.2026). Окружение и карта скриптов — для воспроизводимости. |
+| 14 | [log_run.py](log_run.py) | Модуль журнала EXPERIMENTS.csv | Журнал запусков: строка в EXPERIMENTS.csv появляется в начале запуска (status=running) |
+| 15 | [eval_utils.py](eval_utils.py) | Общие функции оценки | Общие функции задачи 4: загрузка данных и разбиений, подбор порогов на val, метрики на test. |
 
 ## audit_duplicates.py
 
@@ -187,6 +188,35 @@ python experiments/series_c_errors.py
 - `derived/series_C_errors_by_size.csv` — ошибки по размеру группы и seed
 - `derived/series_C_largest_group.csv` — крупнейшая группа test по seed
 
+## convert_datacon.py
+
+Неделя 5 (второй датасет). Перевод DataCon 2019 Stage1 в формат MalBehavD-V1.
+
+```
+python experiments/convert_datacon.py
+python experiments/convert_datacon.py --limit 50 --out-dir derived/datacon_test
+```
+
+Результаты:
+
+- `experiments/logs/convert_datacon.txt` — текстовый отчёт (то же, что на экране)
+
+## describe_datacon.py
+
+Неделя 5 (второй датасет). Первичное описание DataCon 2019 Stage1 после convert_datacon.py.
+
+```
+python experiments/audit_duplicates.py --csv derived/datacon/datacon_raw.csv --out-dir derived/datacon/audit_raw --log experiments/logs/audit_datacon_raw.txt
+python experiments/audit_duplicates.py --csv derived/datacon/datacon_clean.csv --out-dir derived/datacon/audit_clean --log experiments/logs/audit_datacon_clean.txt
+python experiments/describe_datacon.py
+```
+
+Результаты:
+
+- `derived/datacon/datacon_describe.md` — отчёт со всеми таблицами
+- `experiments/logs/describe_datacon.txt то же`
+- `текстом`
+
 ## collect_env.py
 
 Пункт 4 (неделя 2–8.11.2026). Окружение и карта скриптов — для воспроизводимости.
@@ -213,16 +243,3 @@ python experiments/collect_env.py
 Общие функции задачи 4: загрузка данных и разбиений, подбор порогов на val, метрики на test.
 
 Модуль, сам не запускается: его импортируют другие скрипты.
-
-## convert_datacon.py
-
-Неделя 5 (второй датасет). Перевод DataCon 2019 Stage1 в формат MalBehavD-V1.
-
-```
-python experiments/convert_datacon.py
-python experiments/convert_datacon.py --limit 50 --out-dir derived/datacon_test
-```
-
-Результаты:
-
-- `experiments/logs/convert_datacon.txt` — текстовый отчёт (то же, что на экране)
