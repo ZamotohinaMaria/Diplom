@@ -40,6 +40,7 @@
    python experiments/baseline_tfidf.py --protocols C --seeds 43 44 45 46 --blocks main --run-name series_C
    python experiments/run_gine_splits.py --protocols C --seeds 43 44 45 46 --device cpu --run-name series_C
    python experiments/series_c_table.py
+   python experiments/series_c_errors.py
    ```
 3. Оба файла пересобираются командой `python experiments/collect_env.py` (карта — из docstring скриптов, поэтому не расходится с кодом).
 4. GINE на GPU недетерминирован: при повторе числа могут немного отличаться; на CPU (`--device cpu`) повторяются точно.
@@ -184,6 +185,7 @@
 | Файл | Что делает / что изменено | Читает | Пишет |
 |---|---|---|---|
 | [series_c_table.py](experiments/series_c_table.py) | **Новый.** Итог серии C. Правила серии в docstring. Сначала проверяет: у каждой модели ровно seed 42–46 (42 — из пилота, 43–46 — из серии); настройки всех seed совпадают с пилотом, GINE везде на CPU; файлы разбиений не менялись; MCC, пересчитанный по предсказаниям, совпадает с файлом результатов. При нарушении останавливается. Затем считает: метрики по seed, среднее ± std (ddof = 1) по всем строкам и уникальным трассам, разницу GINE − TF-IDF на одних и тех же test, ложные тревоги и пропуски. Имена серий — `--pilot-name` (по умолчанию `pilot_C`), `--run-name` (по умолчанию `series_C`) | `derived/results_{pilot_C,series_C}_{tfidf,gine}.csv`, `derived/configs/*_C_seed*.json`, `derived/predictions/*_C_seed*.csv`, `derived/splits/` | `derived/series_C_table.md`, `series_C_per_seed.csv`, `series_C_summary.csv`, `series_C_paired.csv` |
+| [series_c_errors.py](experiments/series_c_errors.py) | **Новый.** Разбор ошибок серии C по сохранённым предсказаниям (модели не обучает): совпадение ошибок TF-IDF и GINE на уникальных трассах, ошибки по размеру группы C, крупнейшая группа test в каждом seed. Порог — по MCC на val | `derived/results_{pilot_C,series_C}_*.csv`, `derived/predictions/*_C_seed*.csv`, `derived/splits/groups_C.csv` | `derived/series_C_errors.md`, `series_C_errors_overlap.csv`, `series_C_errors_by_size.csv`, `series_C_largest_group.csv` |
 | [baseline_tfidf.py](experiments/baseline_tfidf.py) | **Изменён:** параметр `--run-name` (имя серии, любой протокол). Без него — прежние имена файлов. Обучение и оценка не менялись | — | `derived/results_{ИМЯ}_tfidf.csv`, `experiments/logs/{ИМЯ}_tfidf.txt` |
 | [run_gine_splits.py](experiments/run_gine_splits.py) | **Изменён:** параметр `--run-name`, как в TF-IDF; в `settings` конфигурации не попадает, чтобы конфигурации разных серий совпадали. Обучение и оценка не менялись | — | `derived/results_{ИМЯ}_gine.csv`, `experiments/logs/{ИМЯ}_gine.txt` |
 | [eval_utils.py](experiments/eval_utils.py) | **Изменён:** `is_pilot` заменена на `run_name` (имя серии; без него — прежнее поведение: A/B без имени, C — `pilot_C`) и `results_file` (путь к файлу результатов по имени серии) | — | — |
@@ -206,12 +208,14 @@
 | `series_C_per_seed.csv` | `series_c_table.py` | Строка на (модель, seed): все метрики и матрица ошибок (`tn`, `fp`, `fn`, `tp`, те же с `dedup_`), числа без округления |
 | `series_C_summary.csv` | `series_c_table.py` | Среднее, std, min, max по seed для каждой модели и метрики |
 | `series_C_paired.csv` | `series_c_table.py` | Разница GINE − TF-IDF по каждому seed |
+| `series_C_errors.md` | `series_c_errors.py` | Отчёт разбора ошибок: совпадение ошибок моделей, ошибки по размеру группы, крупнейшая группа test |
+| `series_C_errors_overlap.csv`, `series_C_errors_by_size.csv`, `series_C_largest_group.csv` | `series_c_errors.py` | Те же таблицы по каждому seed |
 
 ### 0 - docs/
 
 | Файл | Что это |
 |---|---|
-| [0 - docs/conspects/week3/](<0 - docs/conspects/week3/>) | Протокол полной серии C (`.docx` и исходный `.md`) |
+| [0 - docs/conspects/week3/](<0 - docs/conspects/week3/>) | П1 — протокол полной серии C; П2 — результаты серии: метрики по seed, сравнение моделей на одних test, влияние seed 44, разбор ошибок, сопоставление с пилотом и A/B (`.docx` и исходный `.md`) |
 
 </details>
 

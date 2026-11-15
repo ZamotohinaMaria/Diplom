@@ -15,10 +15,11 @@
 | 7 | [make_split_c.py](make_split_c.py) | Неделя 2, пункт 2 — разбиение C | Пункт 2 (неделя 2–8.11.2026). Протокол C — разбиение по исполняемым файлам. |
 | 8 | [pilot_c_table.py](pilot_c_table.py) | Неделя 2, пункт 3 — итог пилота C | Пункт 3 (неделя 2–8.11.2026), итог: таблица пилота на разбиении C. |
 | 9 | [series_c_table.py](series_c_table.py) | Неделя 3, 12–13.11 — итог полной серии C | Задача 12–13.11 (неделя 9–15.11.2026), итог: полная серия C — TF-IDF и GINE на пяти разбиениях C. |
-| 10 | [collect_env.py](collect_env.py) | Неделя 2, пункт 4 — окружение и карта скриптов | Пункт 4 (неделя 2–8.11.2026). Окружение и карта скриптов — для воспроизводимости. |
-| 11 | [log_run.py](log_run.py) | Модуль журнала EXPERIMENTS.csv | Журнал запусков: строка в EXPERIMENTS.csv появляется в начале запуска (status=running) |
-| 12 | [eval_utils.py](eval_utils.py) | Общие функции оценки | Общие функции задачи 4: загрузка данных и разбиений, подбор порогов на val, метрики на test. |
-| 13 | [convert_datacon.py](convert_datacon.py) | не внесён в порядок пайплайна (collect_env.py, PIPELINE) | Неделя 5 (второй датасет). Перевод DataCon 2019 Stage1 в формат MalBehavD-V1. |
+| 10 | [series_c_errors.py](series_c_errors.py) | Неделя 3, 12–13.11 — разбор ошибок серии C | Задача 12–13.11 (неделя 9–15.11.2026), разбор ошибок полной серии C (TF-IDF и GINE, seed 42–46). |
+| 11 | [collect_env.py](collect_env.py) | Неделя 2, пункт 4 — окружение и карта скриптов | Пункт 4 (неделя 2–8.11.2026). Окружение и карта скриптов — для воспроизводимости. |
+| 12 | [log_run.py](log_run.py) | Модуль журнала EXPERIMENTS.csv | Журнал запусков: строка в EXPERIMENTS.csv появляется в начале запуска (status=running) |
+| 13 | [eval_utils.py](eval_utils.py) | Общие функции оценки | Общие функции задачи 4: загрузка данных и разбиений, подбор порогов на val, метрики на test. |
+| 14 | [convert_datacon.py](convert_datacon.py) | не внесён в порядок пайплайна (collect_env.py, PIPELINE) | Неделя 5 (второй датасет). Перевод DataCon 2019 Stage1 в формат MalBehavD-V1. |
 
 ## audit_duplicates.py
 
@@ -170,6 +171,21 @@ python experiments/series_c_table.py
 - `derived/series_C_per_seed.csv` — строка на (модель, seed), числа без округления, вместе с FP/FN
 - `derived/series_C_summary.csv` — среднее и std по seed для каждой модели и метрики
 - `derived/series_C_paired.csv` — разница GINE − TF-IDF по каждому seed
+
+## series_c_errors.py
+
+Задача 12–13.11 (неделя 9–15.11.2026), разбор ошибок полной серии C (TF-IDF и GINE, seed 42–46).
+
+```
+python experiments/series_c_errors.py
+```
+
+Результаты:
+
+- `derived/series_C_errors.md` — отчёт с тремя таблицами
+- `derived/series_C_errors_overlap.csv` — совпадение ошибок по seed
+- `derived/series_C_errors_by_size.csv` — ошибки по размеру группы и seed
+- `derived/series_C_largest_group.csv` — крупнейшая группа test по seed
 
 ## collect_env.py
 
