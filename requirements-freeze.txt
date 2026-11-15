@@ -29,7 +29,7 @@ anaconda-project==0.11.1
 annotated-doc==0.0.4
 annotated-types==0.6.0
 antlr4-python3-runtime==4.9.3
-anyio==4.7.0
+anyio==4.16.0
 appdirs==1.4.4
 archspec==0.2.3
 argon2-cffi==21.3.0
@@ -68,7 +68,7 @@ certifi==2026.4.22
 cffi==1.17.1
 chardet==4.0.0
 charset-normalizer==3.3.2
-click==8.3.3
+click==8.5.1
 cloudpathlib==0.23.0
 cloudpickle==3.0.0
 cmeel==0.57.3
@@ -138,15 +138,17 @@ grpcio==1.74.1
 h11==0.16.0
 h5py==3.12.1
 HeapDict==1.0.1
-hf-xet==1.4.3
+hf-xet==1.8.0
 highspy==1.12.0
 holoviews==1.20.2
 httpcore==1.0.9
+httpcore2==2.16.0
 httpx==0.28.1
-huggingface_hub==1.14.0
+httpx2==2.16.0
+huggingface_hub==2.4.0
 hvplot==0.11.3
 hyperlink==21.0.0
-idna==3.7
+idna==3.20
 imageio==2.37.0
 imageio-ffmpeg==0.6.0
 imagesize==1.4.1
@@ -441,7 +443,7 @@ truststore==0.10.0
 Twisted==24.11.0
 twisted-iocpsupport==1.0.2
 typer==0.25.1
-typing_extensions==4.12.2
+typing_extensions==4.16.0
 tzdata==2025.2
 uc-micro-py==1.0.1
 ujson==5.10.0

@@ -1,6 +1,6 @@
 # Карта скриптов experiments/
 
-Собрано `experiments/collect_env.py` 04.11.2026 из docstring скриптов — при изменении скриптов перезапустить. Все команды — из корня репозитория. Каждый запуск записывается в `EXPERIMENTS.csv`.
+Собрано `experiments/collect_env.py` 15.11.2026 из docstring скриптов — при изменении скриптов перезапустить. Все команды — из корня репозитория. Каждый запуск записывается в `EXPERIMENTS.csv`.
 
 ## Порядок запуска
 
@@ -9,14 +9,16 @@
 | 1 | [audit_duplicates.py](audit_duplicates.py) | Неделя 1, задача 1 — аудит дублей | Задача 1. Аудит дублей последовательностей API в MalBehavD-V1. |
 | 2 | [leak_check.py](leak_check.py) | Неделя 1, задача 2 — утечка в схеме НИРС | Задача 2. Утечка в текущей схеме run_splits.py. |
 | 3 | [make_splits.py](make_splits.py) | Неделя 1, задача 3 — разбиения A и B | Задача 3. Разбиения train / val / test для двух протоколов. |
-| 4 | [baseline_tfidf.py](baseline_tfidf.py) | Неделя 1, задача 4 — TF-IDF + LogReg на A/B; неделя 2 — пилот C | Задача 4, модель 1: TF-IDF по n-граммам API (n = 1–3) + логистическая регрессия. |
-| 5 | [run_gine_splits.py](run_gine_splits.py) | Неделя 1, задача 4 — GINE на A/B; неделя 2 — пилот C | Задача 4, модель 2: GINE (лучшая конфигурация из НИРС, архитектура без изменений) на разбиениях A/B. |
+| 4 | [baseline_tfidf.py](baseline_tfidf.py) | Неделя 1, задача 4 — TF-IDF + LogReg на A/B; неделя 2 — пилот C; неделя 3 — серия C | Задача 4, модель 1: TF-IDF по n-граммам API (n = 1–3) + логистическая регрессия. |
+| 5 | [run_gine_splits.py](run_gine_splits.py) | Неделя 1, задача 4 — GINE на A/B; неделя 2 — пилот C; неделя 3 — серия C | Задача 4, модель 2: GINE (лучшая конфигурация из НИРС, архитектура без изменений) на разбиениях A/B. |
 | 6 | [h1_table.py](h1_table.py) | Неделя 1, задача 4 — итог H1 | Задача 4, итог: таблица «модель × протокол» (среднее ± std по seed) и разница A − B для проверки H1. |
 | 7 | [make_split_c.py](make_split_c.py) | Неделя 2, пункт 2 — разбиение C | Пункт 2 (неделя 2–8.11.2026). Протокол C — разбиение по исполняемым файлам. |
 | 8 | [pilot_c_table.py](pilot_c_table.py) | Неделя 2, пункт 3 — итог пилота C | Пункт 3 (неделя 2–8.11.2026), итог: таблица пилота на разбиении C. |
-| 9 | [collect_env.py](collect_env.py) | Неделя 2, пункт 4 — окружение и карта скриптов | Пункт 4 (неделя 2–8.11.2026). Окружение и карта скриптов — для воспроизводимости. |
-| 10 | [log_run.py](log_run.py) | Модуль журнала EXPERIMENTS.csv | Журнал запусков: строка в EXPERIMENTS.csv появляется в начале запуска (status=running) |
-| 11 | [eval_utils.py](eval_utils.py) | Общие функции оценки | Общие функции задачи 4: загрузка данных и разбиений, подбор порогов на val, метрики на test. |
+| 9 | [series_c_table.py](series_c_table.py) | Неделя 3, 12–13.11 — итог полной серии C | Задача 12–13.11 (неделя 9–15.11.2026), итог: полная серия C — TF-IDF и GINE на пяти разбиениях C. |
+| 10 | [collect_env.py](collect_env.py) | Неделя 2, пункт 4 — окружение и карта скриптов | Пункт 4 (неделя 2–8.11.2026). Окружение и карта скриптов — для воспроизводимости. |
+| 11 | [log_run.py](log_run.py) | Модуль журнала EXPERIMENTS.csv | Журнал запусков: строка в EXPERIMENTS.csv появляется в начале запуска (status=running) |
+| 12 | [eval_utils.py](eval_utils.py) | Общие функции оценки | Общие функции задачи 4: загрузка данных и разбиений, подбор порогов на val, метрики на test. |
+| 13 | [convert_datacon.py](convert_datacon.py) | не внесён в порядок пайплайна (collect_env.py, PIPELINE) | Неделя 5 (второй датасет). Перевод DataCon 2019 Stage1 в формат MalBehavD-V1. |
 
 ## audit_duplicates.py
 
@@ -68,7 +70,8 @@ python experiments/make_splits.py
 python experiments/baseline_tfidf.py                                 # оба блока
 python experiments/baseline_tfidf.py --blocks ngram1                 # только проверка на 1-граммах
 python experiments/baseline_tfidf.py --protocols B --seeds 42 43     # часть разбиений
-python experiments/baseline_tfidf.py --protocols C --seeds 42 --blocks main   # пилот C
+python experiments/baseline_tfidf.py --protocols C --seeds 42 --blocks main            # пилот C
+python experiments/baseline_tfidf.py --protocols C --seeds 43 44 45 46 --blocks main --run-name series_C
 ```
 
 Результаты:
@@ -79,9 +82,10 @@ python experiments/baseline_tfidf.py --protocols C --seeds 42 --blocks main   # 
 - `derived/results_tfidf_ngram1.csv`
 - `derived/predictions/tfidf_ngram1_{A,B}_seed{N}.csv`
 - `experiments/logs/baseline_tfidf_ngram1.txt`
+- `derived/results_{имя}_tfidf.csv`
+- `experiments/logs/{имя}_tfidf.txt (блок ngram1 — {имя}_tfidf_ngram1).`
 - `derived/results_pilot_C_tfidf.csv`
-- `derived/predictions/tfidf_C_seed42.csv`
-- `experiments/logs/pilot_C_tfidf.txt`
+- `experiments/logs/pilot_C_tfidf.txt.`
 
 ## run_gine_splits.py
 
@@ -91,6 +95,7 @@ python experiments/baseline_tfidf.py --protocols C --seeds 42 --blocks main   # 
 python experiments/run_gine_splits.py
 python experiments/run_gine_splits.py --protocols A --seeds 42      # один прогон, чтобы оценить время
 python experiments/run_gine_splits.py --protocols C --seeds 42 --device cpu   # пилот C
+python experiments/run_gine_splits.py --protocols C --seeds 43 44 45 46 --device cpu --run-name series_C
 ```
 
 Результаты:
@@ -100,9 +105,10 @@ python experiments/run_gine_splits.py --protocols C --seeds 42 --device cpu   # 
 - `derived/gine_models/gine_{A,B}_seed{N}.pt` — веса лучшей эпохи (в git не попадают)
 - `experiments/logs/run_gine_splits.txt` — текстовый отчёт
 - `derived/configs/gine_{protocol}_seed{N}.json` — конфигурация запуска (настройки, эпоха, температура, пороги)
+- `derived/results_{имя}_gine.csv`
+- `experiments/logs/{имя}_gine.txt (--out / --log задают пути явно).`
 - `derived/results_pilot_C_gine.csv`
-- `derived/predictions/gine_C_seed42.csv`
-- `experiments/logs/pilot_C_gine.txt`
+- `experiments/logs/pilot_C_gine.txt.`
 
 ## h1_table.py
 
@@ -149,6 +155,22 @@ python experiments/pilot_c_table.py
 - `derived/pilot_C_table.md` — отчёт: таблица пилота, выбранные на val настройки, контекст A/B
 - `derived/pilot_C_table.csv` — числа пилота без округления (строка на модель)
 
+## series_c_table.py
+
+Задача 12–13.11 (неделя 9–15.11.2026), итог: полная серия C — TF-IDF и GINE на пяти разбиениях C.
+
+```
+python experiments/run_gine_splits.py --protocols C --seeds 43 44 45 46 --device cpu --run-name series_C
+python experiments/series_c_table.py
+```
+
+Результаты:
+
+- `derived/series_C_table.md` — отчёт: таблица по seed, среднее ± std, разница моделей, ошибки, проверки
+- `derived/series_C_per_seed.csv` — строка на (модель, seed), числа без округления, вместе с FP/FN
+- `derived/series_C_summary.csv` — среднее и std по seed для каждой модели и метрики
+- `derived/series_C_paired.csv` — разница GINE − TF-IDF по каждому seed
+
 ## collect_env.py
 
 Пункт 4 (неделя 2–8.11.2026). Окружение и карта скриптов — для воспроизводимости.
@@ -175,3 +197,16 @@ python experiments/collect_env.py
 Общие функции задачи 4: загрузка данных и разбиений, подбор порогов на val, метрики на test.
 
 Модуль, сам не запускается: его импортируют другие скрипты.
+
+## convert_datacon.py
+
+Неделя 5 (второй датасет). Перевод DataCon 2019 Stage1 в формат MalBehavD-V1.
+
+```
+python experiments/convert_datacon.py
+python experiments/convert_datacon.py --limit 50 --out-dir derived/datacon_test
+```
+
+Результаты:
+
+- `experiments/logs/convert_datacon.txt` — текстовый отчёт (то же, что на экране)

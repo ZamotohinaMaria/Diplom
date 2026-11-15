@@ -1,0 +1,33 @@
+{
+  "model": "gine_e40",
+  "protocol": "C",
+  "seed": 44,
+  "split_file": "derived\\splits\\C_seed44.json",
+  "split_sha256": "085177ceed1602bf16051fb36f81d8fe4b5054c12d5c8c76f0d387a68b0ff7f3",
+  "settings": {
+    "hidden_dim": 128,
+    "num_layers": 3,
+    "dropout": 0.3,
+    "batch_size": 64,
+    "epochs": 40,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "max_seq_len": 400,
+    "min_token_freq": 1,
+    "undirected": false,
+    "add_skip_edges": false,
+    "calibration": "temperature",
+    "select_metric": "mcc",
+    "device": "cpu"
+  },
+  "selected_on_val": {
+    "best_epoch": 11,
+    "val_mcc_at_0.5": 0.9107192311516533,
+    "temperature": 2.296339750289917,
+    "thr_mcc": 0.7049225568771362,
+    "thr_tpr95": 0.2555128335952759
+  },
+  "vocab_size": 285,
+  "train_sec": 35.1,
+  "model_file": "derived\\gine_models\\gine_C_seed44.pt"
+}

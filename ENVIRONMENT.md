@@ -1,6 +1,6 @@
 # Окружение
 
-Собрано `experiments/collect_env.py` 04.11.2026. На этом окружении получены результаты в `derived/` (см. журнал `EXPERIMENTS.csv`).
+Собрано `experiments/collect_env.py` 15.11.2026. На этом окружении получены результаты в `derived/` (см. журнал `EXPERIMENTS.csv`).
 
 | Что | Версия |
 |---|---|

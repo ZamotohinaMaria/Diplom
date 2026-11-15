@@ -1,0 +1,36 @@
+{
+  "model": "tfidf_logreg",
+  "protocol": "C",
+  "seed": 44,
+  "split_file": "derived\\splits\\C_seed44.json",
+  "split_sha256": "085177ceed1602bf16051fb36f81d8fe4b5054c12d5c8c76f0d387a68b0ff7f3",
+  "settings": {
+    "ngram_range": [
+      1,
+      3
+    ],
+    "token_pattern": "\\S+",
+    "lowercase": false,
+    "sublinear_tf": true,
+    "C_grid": [
+      0.01,
+      0.1,
+      1.0,
+      10.0,
+      100.0,
+      1000.0,
+      10000.0
+    ],
+    "max_iter": 5000,
+    "select_C": "max MCC on val",
+    "threshold": "max MCC on val; TPR=0.95 on val"
+  },
+  "selected_on_val": {
+    "C": 0.1,
+    "val_mcc": 0.9223254642340656,
+    "thr_mcc": 0.4494119229227436,
+    "thr_tpr95": 0.44397328219271276
+  },
+  "n_features": 20569,
+  "train_sec": 2.3
+}
